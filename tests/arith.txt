@@ -22,3 +22,12 @@ o
 '\n'
 
     mateo mckee '
+    
+
+_numHouses
+
+_num_houses
+
+_fgr4932
+
+45fgh 

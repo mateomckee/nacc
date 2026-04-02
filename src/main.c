@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "lexer.h"
+#include "parser.h"
 
 // simple function to take file contents and return them as a string
 char* read_file(const char* filepath) {
@@ -41,11 +41,10 @@ int main(int argc, char* argv[]) {
     Lexer lexer;
     lexer_init(&lexer, char_stream);
 
-    Token token;
-    while((token = next_token(&lexer)).kind != TOK_EOF) {
-
-        print_token(token);
-    }
+    //parser
+    Parser parser;
+    parser_init(&parser, &lexer);
+    ASTNode* root = parse_program(&parser);
 
     free(char_stream);
 
