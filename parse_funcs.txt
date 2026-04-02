@@ -1,0 +1,33 @@
+Write them in this order — each one depends on the ones below it:
+
+**Expressions first (easiest to test in isolation):**
+```
+parse_primary()     // literals, identifiers, (expr), function calls
+parse_unary()       // - ! * &
+parse_mul()         // * /
+parse_add()         // + -
+parse_compare()     // < > <= >=
+parse_equality()    // == !=
+parse_and()         // &&
+parse_or()          // ||
+parse_assign()      // =
+parse_expr()        // just calls parse_assign
+```
+
+**Then statements:**
+```
+parse_decl()        // int x = expr;
+parse_return()      // return expr;
+parse_if()          // if (expr) block else block
+parse_while()       // while (expr) block
+parse_for()         // for (init; cond; post) block
+parse_expr_stmt()   // expr;
+parse_block()       // { stmt* }
+parse_stmt()        // dispatcher, calls all of the above
+```
+
+**Then top level:**
+```
+parse_params()      // (int a, int b, ...)
+parse_function()    // int foo(params) block
+parse_program()     // function*
