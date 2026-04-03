@@ -83,15 +83,7 @@ typedef struct {
 } Lexer;
 
 void lexer_init(Lexer* lexer, char* source);
-
-char advance(Lexer* lexer);
-
-char peek(Lexer* lexer);
-
-void skip_ws(Lexer* lexer);
-
 Token next_token(Lexer* lexer);
 
 const char* token_kind_str(TokenKind kind);
-
 void print_token(Token token);

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <ctype.h>
+#include <string.h>
 #include "lexer.h"
 
 //helper methods to make creating tokens cleaner and quicker
@@ -27,7 +28,7 @@ void lexer_init(Lexer* lexer, char* source) {
 }
 
 // advance to next char and return it
-char advance(Lexer* lexer) {
+static char advance(Lexer* lexer) {
     return (lexer->source)[lexer->pos++];
 }
 
@@ -59,7 +60,10 @@ Token scan_string_literal(Lexer* lexer) {
     int start = lexer->pos;
     int len = 0;
     char at;
-    while(isalnum((at = advance(lexer))) || at == '_') { len++; }
+    while((at = advance(lexer)) != '"' && at != '\0') { 
+        if(at == '\\') { advance(lexer); len++; } //escape sequence
+        len++;
+    }
 
     return make_token(TOK_STRING_LIT, lexer->source+start, len, lexer->line);
 }
@@ -103,6 +107,25 @@ Token scan_identifier(Lexer* lexer) {
     char at;
     while(isalnum(at = peek(lexer)) || at == '_') { advance(lexer); len++; }
 
+    //check for keywords and return any matches
+    if (strncmp(lexer->source + start, "int", len) == 0 && len == 3)
+        return make_token(TOK_INT, lexer->source + start, len, lexer->line);
+    if (strncmp(lexer->source + start, "char", len) == 0 && len == 4)
+        return make_token(TOK_CHAR, lexer->source + start, len, lexer->line);
+    if (strncmp(lexer->source + start, "if", len) == 0 && len == 2)
+        return make_token(TOK_IF, lexer->source + start, len, lexer->line);
+    if (strncmp(lexer->source + start, "else", len) == 0 && len == 4)
+        return make_token(TOK_ELSE, lexer->source + start, len, lexer->line);
+    if (strncmp(lexer->source + start, "while", len) == 0 && len == 5)
+        return make_token(TOK_WHILE, lexer->source + start, len, lexer->line);
+    if (strncmp(lexer->source + start, "for", len) == 0 && len == 3)
+        return make_token(TOK_FOR, lexer->source + start, len, lexer->line);
+    if (strncmp(lexer->source + start, "return", len) == 0 && len == 6)
+        return make_token(TOK_RETURN, lexer->source + start, len, lexer->line);
+    if (strncmp(lexer->source + start, "void", len) == 0 && len == 4)
+        return make_token(TOK_VOID, lexer->source + start, len, lexer->line);
+
+    //return just an ID
     return make_token(TOK_ID, lexer->source+start, len, lexer->line);
 }
 

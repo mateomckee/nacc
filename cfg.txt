@@ -1,0 +1,91 @@
+AI generated CFG to help me plan out and define my parser functions
+Each parse_ function is exactly one CFG rule, and its logic reflects the CFG rule itself
+
+ * nacc Grammar (LL(1) Recursive Descent)
+ * ========================================
+ *
+ * program         -> function*
+ *
+ * function        -> type IDENT '(' params ')' block
+ *
+ * params          -> param (',' param)*
+ *                 |  ε
+ *
+ * param           -> type IDENT
+ *
+ * block           -> '{' stmt* '}'
+ *
+ * stmt            -> if_stmt
+ *                 |  while_stmt
+ *                 |  for_stmt
+ *                 |  return_stmt
+ *                 |  decl_stmt
+ *                 |  expr_stmt
+ *
+ * if_stmt         -> 'if' '(' expr ')' block
+ *                 |  'if' '(' expr ')' block 'else' block
+ *
+ * while_stmt      -> 'while' '(' expr ')' block
+ *
+ * for_stmt        -> 'for' '(' for_init expr ';' expr ')' block
+ *
+ * for_init        -> decl_stmt
+ *                 |  expr_stmt
+ *
+ * return_stmt     -> 'return' expr ';'
+ *                 |  'return' ';'
+ *
+ * decl_stmt       -> type IDENT '=' expr ';'
+ *                 |  type IDENT ';'
+ *
+ * expr_stmt       -> expr ';'
+ *
+ * type            -> 'int' '*'?
+ *                 |  'char' '*'?
+ *                 |  'void'
+ *
+ * expr            -> assign
+ *
+ * assign          -> IDENT '=' assign
+ *                 |  or
+ *
+ * or              -> and ('||' and)*
+ *
+ * and             -> equality ('&&' equality)*
+ *
+ * equality        -> compare ('==' compare)*
+ *                 |  compare ('!=' compare)*
+ *
+ * compare         -> add ('<'  add)*
+ *                 |  add ('>'  add)*
+ *                 |  add ('<=' add)*
+ *                 |  add ('>=' add)*
+ *
+ * add             -> mul ('+' mul)*
+ *                 |  mul ('-' mul)*
+ *
+ * mul             -> unary ('*' unary)*
+ *                 |  unary ('/' unary)*
+ *
+ * unary           -> '-' unary
+ *                 |  '!' unary
+ *                 |  '*' unary
+ *                 |  '&' unary
+ *                 |  primary
+ *
+ * primary         -> INT_LIT
+ *                 |  CHAR_LIT
+ *                 |  STRING_LIT
+ *                 |  IDENT '(' args ')'
+ *                 |  IDENT
+ *                 |  '(' expr ')'
+ *
+ * args            -> expr (',' expr)*
+ *                 |  ε
+ *
+ * Terminals (tokens):
+ *   IDENT        identifier
+ *   INT_LIT      integer literal
+ *   CHAR_LIT     character literal
+ *   STRING_LIT   string literal
+ *   ε            empty production

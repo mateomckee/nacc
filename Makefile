@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g
 
-SRC = src/main.c src/lexer.c
+SRC = src/main.c src/util.c src/lexer.c src/parser.c
 OUT = nacc
 
 all:
