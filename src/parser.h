@@ -56,8 +56,8 @@ typedef struct {
 
     struct ASTNode* left;
     struct ASTNode* right;
-    struct ASTNode* extra1; //extra child node in case of if/else, for loop parsing
-    struct ASTNode* extra2; //specifically for for loops (initialization; body; condition; increment)
+    struct ASTNode* extra; //extra 3rd child node in case of if/else
+    struct ASTNode* next;   //additional 4th child for "next sibling" pointing, also used in for loops
 } ASTNode;
 
 void parser_init(Parser* parser, Lexer* lexer);

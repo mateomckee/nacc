@@ -1,7 +1,7 @@
-int main( ) {
+int add(int a, int b) {
 
-    int a = 5;
-    int b = 15;
+}
 
-    return 0;
+char next_token() {
+
 }
