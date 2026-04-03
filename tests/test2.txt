@@ -1,19 +1,5 @@
 
-
-   'f'
-
-identifier
+int main() {
 
 
-
-"hi"
-
-12345
-
-
-4643
-
-4 5   9
-
-45
-
+char add(int a , int b) {}

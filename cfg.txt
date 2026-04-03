@@ -1,4 +1,6 @@
-/*
+AI generated CFG to help me plan out and define my parser functions
+Each parse_ function is exactly one CFG rule, and its logic reflects the CFG rule itself
+
  * nacc Grammar (LL(1) Recursive Descent)
  * ========================================
  *
@@ -87,4 +89,3 @@
  *   CHAR_LIT     character literal
  *   STRING_LIT   string literal
  *   ε            empty production
- */

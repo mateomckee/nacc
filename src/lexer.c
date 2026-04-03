@@ -60,7 +60,10 @@ Token scan_string_literal(Lexer* lexer) {
     int start = lexer->pos;
     int len = 0;
     char at;
-    while(isalnum((at = advance(lexer))) || at == '_') { len++; }
+    while((at = advance(lexer)) != '"' && at != '\0') { 
+        if(at == '\\') { advance(lexer); len++; } //escape sequence
+        len++;
+    }
 
     return make_token(TOK_STRING_LIT, lexer->source+start, len, lexer->line);
 }

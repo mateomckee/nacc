@@ -32,6 +32,7 @@ typedef enum {
     NODE_UNOP,
     NODE_CALL,
     NODE_IDENT,
+    NODE_POSTFIX,
 
     NODE_INT_LIT,
     NODE_CHAR_LIT,
@@ -56,9 +57,11 @@ typedef struct {
 
     struct ASTNode* left;
     struct ASTNode* right;
-    struct ASTNode* extra; //extra 3rd child node in case of if/else
+    struct ASTNode* extra; 
+    struct ASTNode* extra2;
     struct ASTNode* next;   //additional 4th child for "next sibling" pointing, also used in for loops
 } ASTNode;
 
 void parser_init(Parser* parser, Lexer* lexer);
 ASTNode* parse_program(Parser* parser);
+void print_ast(ASTNode* node, int depth);

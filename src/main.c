@@ -46,6 +46,8 @@ int main(int argc, char* argv[]) {
     parser_init(&parser, &lexer);
     ASTNode* root = parse_program(&parser);
 
+    print_ast(root, 0);
+
     free(char_stream);
 
     return 0;
