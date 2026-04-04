@@ -51,15 +51,19 @@ typedef enum {
 //tree structure
 typedef struct {
     NodeKind kind;
-    TypeKind type; //used only for nodes with a type (NODE_FUNC, NODE_DECL, NODE_PARAM), otherwise goes unused, will be helpful later in sema.c when checking types
+    TypeKind type; //used only for nodes that hold a type (NODE_FUNC, NODE_DECL, NODE_PARAM), otherwise goes unused, will be helpful later in sema.c when checking types, and implementing the symbol table
 
     Token token;
 
     struct ASTNode* left;
     struct ASTNode* right;
+    //extra child nodes for productions that store additional data such as if and for statements
     struct ASTNode* extra; 
     struct ASTNode* extra2;
-    struct ASTNode* next;   //additional 4th child for "next sibling" pointing, also used in for loops
+    
+    struct ASTNode* next;   // special child node reserved for storing "sibling" nodes as a linked list
+                            // for example, a NODE_FUNC node is stored as the left child of NODE_PROGRAM, it is the head of the linked list and contains the rest of the programs NODE_FUNC nodes through its "next" value
+                            // same pattern for storing params, and args
 } ASTNode;
 
 void parser_init(Parser* parser, Lexer* lexer);

@@ -73,6 +73,7 @@ ASTNode* make_node(NodeKind kind, Token token) {
     node->left = NULL;
     node->right = NULL;
     node->extra = NULL;
+    node->extra2 = NULL;
     node->next = NULL;
     return node;
 }
