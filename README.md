@@ -48,25 +48,6 @@ source.c → [lexer] → [parser] → [sema] → [irgen] → [codegen] → outpu
 
 No other dependencies. nacc itself is written in C and builds with Make.
 
-### installing gcc (if not already installed)
-
-**macOS:**
-```bash
-xcode-select --install
-```
-
-**Ubuntu/Debian:**
-```bash
-sudo apt install gcc
-```
-
-**Raspberry Pi (Raspberry Pi OS):**
-```bash
-sudo apt install gcc
-```
-
----
-
 ## building nacc
 
 ```bash
