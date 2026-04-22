@@ -583,6 +583,7 @@ ASTNode* parse_program(Parser* parser) {
 }
 
 //AI generated helper functions to print/visualize my AST
+//not important to the compilation process, just to have something to show my professor visually
 const char* node_kind_str(NodeKind kind) {
     switch(kind) {
         case NODE_PROGRAM:    return "NODE_PROGRAM";

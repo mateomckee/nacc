@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "parser.h"
+#include "sema.h"
 
 // simple function to take file contents and return them as a string
 char* read_file(const char* filepath) {
@@ -44,9 +44,19 @@ int main(int argc, char* argv[]) {
     //parser
     Parser parser;
     parser_init(&parser, &lexer);
+
+    //semantic analysis
+    Sema sema;
+    sema_init(&sema);
+
     ASTNode* root = parse_program(&parser);
 
-    print_ast(root, 0);
+    //first pass sema
+    collect_functions(&sema, root);
+    //second pass sema
+    sema_node(&sema, root);
+
+    //
 
     free(char_stream);
 
