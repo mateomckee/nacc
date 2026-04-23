@@ -117,8 +117,11 @@ void sema_node(Sema* sema, ASTNode* node) {
     printf(" '%.*s'", node->token.length, node->token.start);
 
     switch(node->kind) {
-        //simply start by walking first function
+        //simply start by walking first function and first global variable
         case NODE_PROGRAM :
+            //first walk global variables
+            sema_node(sema, node->right);
+            //then walk functions
             sema_node(sema, node->left);    
             break;
         //set current_return, push scope for params, declare params, walk body, pop scope

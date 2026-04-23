@@ -108,7 +108,7 @@ TypeKind consume_type(Parser* parser) {
             break;
         case TOK_VOID :
             advance(parser);
-            type = TYPE_VOID;
+            type = (match(parser, TOK_STAR)) ? TYPE_VOID_PTR : TYPE_VOID;
             break;
         default :
             error(parser->current_token.line, "parsed token is not a type");
@@ -325,6 +325,8 @@ ASTNode* parse_decl(Parser* parser) {
     TypeKind type = consume_type(parser);
 
     Token token = expect(parser, TOK_ID, "expected variable name");
+
+    if(type == TYPE_VOID) { error(token.line, "cannot have a variable of type void"); }
 
     ASTNode* left = NULL;
     //if this declaration is also initializing
@@ -593,7 +595,7 @@ ASTNode* parse_program(Parser* parser) {
         }
         //global variable
         else if(check(parser, TOK_SEMICOLON) || check(parser, TOK_EQUAL)) {
-            if(type == TOK_VOID) { error(token.line, "cannot have a variable of type void"); }
+            if(type == TYPE_VOID) { error(token.line, "cannot have a variable of type void"); }
             ASTNode* global = parse_global(parser, type, token);
             if(g_head == NULL) {
                 g_head = global;

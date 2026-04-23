@@ -45,7 +45,8 @@ typedef enum {
     TYPE_CHAR,
     TYPE_VOID,
     TYPE_INT_PTR,
-    TYPE_CHAR_PTR
+    TYPE_CHAR_PTR,
+    TYPE_VOID_PTR
 } TypeKind;
 
 //tree structure

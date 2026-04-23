@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
 
     ASTNode* root = parse_program(&parser);
 
-    print_ast(root, 0);
+    //print_ast(root, 0);
 
     //first pass sema
     collect_functions(&sema, root);
