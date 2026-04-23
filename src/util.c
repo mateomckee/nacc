@@ -1,9 +1,16 @@
+#include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 
 //helper functions, AI generated
-void error(int line, char* msg) {
-    fprintf(stderr, "Error on line %d: %s\n", line, msg);
+
+void error(int line, const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    fprintf(stderr, "error on line %d: ", line);
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+    va_end(args);
     exit(1);
 }
 

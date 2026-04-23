@@ -27,7 +27,7 @@ typedef struct {
     int is_global;
 } Symbol;
 
-typedef struct {
+typedef struct Scope {
     struct Scope* parent; //linkedlist pointer to previous scope for closing current scope
     
     int count;

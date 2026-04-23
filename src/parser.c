@@ -93,7 +93,7 @@ ASTNode* make_unop(Token op, ASTNode* operand) {
 
 //helper function to consume a type token and return it
 TypeKind consume_type(Parser* parser) {
-    TypeKind type;
+    TypeKind type = TYPE_NONE;
 
     //check for which type token we're at
     switch(parser->current_token.kind) {

@@ -53,13 +53,13 @@ void push_scope(Sema* sema) {
 
 //creates and places a new symbol into the scope stack at the current scope
 void declare_symbol(Sema* sema, Symbol symbol) {
-   
-    printf(" decl '%.*s'", symbol.length, symbol.start);
+       
 }
 
 //searches scope stack for declared symbol
-void lookup_symbol(Sema* sema, const char* start, int length) {
-    
+Symbol* lookup_symbol(Sema* sema, const char* start, int length) {
+
+    return NULL;
 }
 
 //searches sema->functions array for a declare function symbol
@@ -114,7 +114,7 @@ void collect_functions(Sema* sema, ASTNode* root) {
 void sema_node(Sema* sema, ASTNode* node) {
     if(node == NULL) return;
 
-    printf(" '%.*s'", node->token.length, node->token.start);
+    printf("sema: %s '%.*s'\n", node_kind_str(node->kind), node->token.length, node->token.start);
 
     switch(node->kind) {
         //simply start by walking first function and first global variable
@@ -165,9 +165,14 @@ void sema_node(Sema* sema, ASTNode* node) {
         case NODE_RETURN :
             
             break;
-        case NODE_DECL :
-            
+        case NODE_DECL : {
+            Symbol* symbol = lookup_symbol(sema, node->token.start, node->token.length);
+            if(symbol != NULL) {
+                error(node->token.line, "redeclaration of '%.*s'", node->token.length, node->token.start);
+            }
+
             break;
+        }
         case NODE_ASSIGN :
             
             break;

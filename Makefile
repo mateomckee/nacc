@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -g
+CFLAGS = -Wall -Wextra -g -Wno-unused-parameter -Wno-unused-variable
 
 SRC = src/main.c src/util.c src/lexer.c src/parser.c src/sema.c
 OUT = nacc
