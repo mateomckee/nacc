@@ -4,8 +4,9 @@
 
 //forward declarations
 ASTNode* parse_program(Parser* parser);
-ASTNode* parse_function(Parser* parser);
+ASTNode* parse_function(Parser* parser, TypeKind type, Token token);
 ASTNode* parse_params(Parser* parser);
+ASTNode* parse_global(Parser* parser, TypeKind type, Token token);
 ASTNode* parse_block(Parser* parser);
 ASTNode* parse_stmt(Parser* parser);
 ASTNode* parse_if(Parser* parser);
@@ -487,6 +488,25 @@ ASTNode* parse_block(Parser* parser) {
     return node;
 }
 
+ASTNode* parse_global(Parser* parser, TypeKind type, Token token) {
+    //pick up from where parse_program left off
+    
+    ASTNode* left = NULL;
+    //if also initializing
+    if(match(parser, TOK_EQUAL)) {
+        left = parse_expr(parser);
+    }
+
+    expect(parser, TOK_SEMICOLON, "expected \';\' after declaration");
+    
+    ASTNode* node = make_node(NODE_DECL, token);
+    node->token = token;
+    node->type = type;
+    node->left = left;
+
+    return node;
+}
+
 ASTNode* parse_params(Parser* parser) {
     ASTNode* head = NULL;
     ASTNode* tail = NULL;
@@ -520,12 +540,8 @@ ASTNode* parse_params(Parser* parser) {
     return head;
 }
 
-ASTNode* parse_function(Parser* parser) {
-    //production rules
-    TypeKind type = consume_type(parser);
-
-    Token token = expect(parser, TOK_ID, "expected function name");
-
+ASTNode* parse_function(Parser* parser, TypeKind type, Token token) {
+    //pick up from where parse_program left off
     expect(parser, TOK_LPAREN, "expected \'(\' after function name");
 
     ASTNode* left = NULL;
@@ -547,37 +563,57 @@ ASTNode* parse_function(Parser* parser) {
     return node;
 }
 
-//make each expect, match, check call per line. if something is expected and not found, prints error and exits program. if found, advance to next token
-//if something is matched and not found, ignore because its optional. if found, advance to next token
-
 ASTNode* parse_program(Parser* parser) {
-    //if first token is a type or void, parse for a function, check does not consume token just reads, parse_function will consume expecting a full function definition
-    //since ASTNode has limited child nodes, I'm going to use a linked-list approach to store functions as they are parsed. the head will be the left node of NODE_PROGRAM node, and from there all remaining functions are stored
-    //in the next pointer (every node has 2 children, 1 extra, 1 next), forming a linked-list
-
-    //token passed in is not meaningful, just needed to create node
     ASTNode* root = make_node(NODE_PROGRAM, parser->current_token);
-   
-    int i = 0;
 
-    ASTNode* head = NULL;
-    ASTNode* tail = NULL;
+    //function head/tail linkedlist
+    ASTNode* f_head = NULL;
+    ASTNode* f_tail = NULL;
+
+    //global (variables) head/tail linkedlist
+    ASTNode* g_head = NULL;
+    ASTNode* g_tail = NULL;
+
     while(check(parser, TOK_INT) || check(parser, TOK_CHAR) || check(parser, TOK_VOID)) {
-        ASTNode* func = parse_function(parser);
-        if(head == NULL) {
-            head = func;
-            tail = func;
+        //consume the type and ID, let parse_function and parse_global consume the rest of their respective signatures
+        TypeKind type = consume_type(parser);
+        Token token = expect(parser, TOK_ID, "expected function or variable name");
+
+        //function
+        if(check(parser, TOK_LPAREN)) {
+            ASTNode* func = parse_function(parser, type, token);
+            if(f_head == NULL) {
+                f_head = func;
+                f_tail = func;
+            }
+            else {
+                f_tail->next = func;
+                f_tail = f_tail->next;
+            }
         }
+        //global variable
+        else if(check(parser, TOK_SEMICOLON) || check(parser, TOK_EQUAL)) {
+            if(type == TOK_VOID) { error(token.line, "cannot have a variable of type void"); }
+            ASTNode* global = parse_global(parser, type, token);
+            if(g_head == NULL) {
+                g_head = global;
+                g_tail = global;
+            }
+            else {
+                g_tail->next = global;
+                g_tail = g_tail->next;
+            }
+        }
+        //other cases could go here 
         else {
-            tail->next = func;
-            tail = tail->next;
+            error(token.line, "expected function or variable declaration");
         }
-        i++;
     }
 
     expect(parser, TOK_EOF, "unexpected token at top level");
-    
-    root->left = head;
+
+    root->left = f_head;
+    root->right = g_head;
 
     return root;
 }

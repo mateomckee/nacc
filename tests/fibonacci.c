@@ -1,3 +1,9 @@
+char get_letter() {
+    return 'g';
+}
+
+int global = 10*100+3;
+
 int fib(int x) {
     if (n <= 1) {
         return n;
