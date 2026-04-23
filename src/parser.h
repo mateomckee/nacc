@@ -69,3 +69,4 @@ typedef struct {
 void parser_init(Parser* parser, Lexer* lexer);
 ASTNode* parse_program(Parser* parser);
 void print_ast(ASTNode* node, int depth);
+const char* type_kind_str(TypeKind type);
