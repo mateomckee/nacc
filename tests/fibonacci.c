@@ -5,8 +5,10 @@ char get_letter() {
 
 int global = 10*100+3;
 
+
 void* bad_var = 10;
 int fib(int x) {
+    int b = 10;
     if (n <= 1) {
         return n;
     }

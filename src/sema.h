@@ -37,12 +37,15 @@ typedef struct Scope {
 //contains everything needed for semantic analysis, e.g., scope stack, return type
 typedef struct {
     //symbol table
+    int depth;
     Scope* current_scope; //most local scope
     TypeKind current_return; //return type of function being walked
     
     //function symbols
     int func_count;
     FuncSymbol functions[MAX_FUNC];
+
+    int current_line; //error printing
 } Sema;
 
 void sema_init(Sema* sema);
