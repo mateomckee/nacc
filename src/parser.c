@@ -8,7 +8,7 @@ ASTNode* parse_function(Parser* parser, TypeKind type, Token token);
 ASTNode* parse_params(Parser* parser);
 ASTNode* parse_global(Parser* parser, TypeKind type, Token token);
 ASTNode* parse_block(Parser* parser);
-ASTNode* parse_stmt(Parser* parser);
+ASTNode* parse_statement(Parser* parser);
 ASTNode* parse_if(Parser* parser);
 ASTNode* parse_while(Parser* parser);
 ASTNode* parse_for(Parser* parser);
@@ -93,7 +93,7 @@ ASTNode* make_unop(Token op, ASTNode* operand) {
 
 //helper function to consume a type token and return it
 TypeKind consume_type(Parser* parser) {
-    TypeKind type;
+    TypeKind type = TYPE_NONE;
 
     //check for which type token we're at
     switch(parser->current_token.kind) {
@@ -178,6 +178,7 @@ ASTNode* parse_primary(Parser* parser) {
                 call->left = args;
                 return call;
             }
+            //postfix
             else if(check(parser, TOK_PLUSPLUS) || check(parser, TOK_MINUSMINUS)) {
                 advance(parser);
                 Token operator = parser->previous_token;
@@ -188,6 +189,7 @@ ASTNode* parse_primary(Parser* parser) {
             return ident;
         }
         default :
+            printf("parse_primary default: kind=%s\n", token_kind_str(kind));
             error(token.line, "expected expression");
             return NULL;
     }
@@ -382,7 +384,7 @@ ASTNode* parse_for(Parser* parser) {
 
     expect(parser, TOK_RPAREN, "expected \')\' after for post");
 
-    ASTNode* extra = parse_block(parser);
+    ASTNode* extra = check(parser, TOK_LBRACE) ? parse_block(parser) : parse_statement(parser);
 
     ASTNode* node = make_node(NODE_FOR, token);
     node->left = left;
@@ -402,8 +404,7 @@ ASTNode* parse_while(Parser* parser) {
 
     expect(parser, TOK_RPAREN, "expected \')\' after while condition");
 
-    ASTNode* right = parse_block(parser);
-
+    ASTNode* right = check(parser, TOK_LBRACE) ? parse_block(parser) : parse_statement(parser);
 
     ASTNode* node = make_node(NODE_WHILE, token);
     node->left = left;
@@ -421,7 +422,7 @@ ASTNode* parse_if(Parser* parser) {
 
     expect(parser, TOK_RPAREN, "expected\')\' after if statement");
 
-    ASTNode* right = parse_block(parser);
+    ASTNode* right = check(parser, TOK_LBRACE) ? parse_block(parser) : parse_statement(parser);
 
     ASTNode* extra = NULL;
     if(match(parser, TOK_ELSE)) {
@@ -654,6 +655,7 @@ const char* type_kind_str(TypeKind kind) {
         case TYPE_VOID:     return "void";
         case TYPE_INT_PTR:  return "int*";
         case TYPE_CHAR_PTR: return "char*";
+        case TYPE_VOID_PTR: return "void*";
         default:            return "unknown";
     }
 }

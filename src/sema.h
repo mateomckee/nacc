@@ -27,7 +27,7 @@ typedef struct {
     int is_global;
 } Symbol;
 
-typedef struct {
+typedef struct Scope {
     struct Scope* parent; //linkedlist pointer to previous scope for closing current scope
     
     int count;
@@ -37,12 +37,17 @@ typedef struct {
 //contains everything needed for semantic analysis, e.g., scope stack, return type
 typedef struct {
     //symbol table
+    int depth;
     Scope* current_scope; //most local scope
     TypeKind current_return; //return type of function being walked
+    const char* current_func_name;
+    int current_func_name_len;
     
     //function symbols
     int func_count;
     FuncSymbol functions[MAX_FUNC];
+
+    int current_line; //error printing
 } Sema;
 
 void sema_init(Sema* sema);

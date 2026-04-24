@@ -2,6 +2,7 @@
 #include <ctype.h>
 #include <string.h>
 #include "lexer.h"
+#include "util.h"
 
 //helper methods to make creating tokens cleaner and quicker
 Token make_token(TokenKind kind, const char* start, int length, int line) {
@@ -35,6 +36,30 @@ static char advance(Lexer* lexer) {
 // return current char
 char peek(Lexer* lexer) {
     return (lexer->source)[lexer->pos];
+}
+
+void skip_single_line_comment(Lexer* lexer) {
+    char at = peek(lexer);
+    while(at != '\n' && at != '\0') {
+        advance(lexer);
+        at = peek(lexer);
+    }
+}
+
+void skip_multi_line_comment(Lexer* lexer) {
+    advance(lexer); //consume * so it doesn't confuse it as the end of comment
+    while(1) {
+        if(peek(lexer) == '\0') {
+            error(lexer->line, "unterminated block comment");
+        }
+        if(peek(lexer) == '\n') lexer->line++;
+
+        char c = advance(lexer);
+        if(c == '*' && peek(lexer) == '/') {
+            advance(lexer); //consume closing /
+            break;
+        }
+    }
 }
 
 // continuously skips chars if they are whitespace
@@ -195,6 +220,16 @@ Token next_token(Lexer* lexer) {
                 if (peek(lexer) == '=') {
                     advance(lexer);
                     return make_token(TOK_DIVEQ, lexer->source+lexer->pos-2, 2, lexer->line);
+                }
+                //single line comment
+                if(peek(lexer) == '/') {
+                    skip_single_line_comment(lexer);
+                    return next_token(lexer);
+                }
+                //multi line comment
+                if(peek(lexer) == '*') {
+                    skip_multi_line_comment(lexer);
+                    return next_token(lexer);
                 }
                 return make_single(TOK_SLASH, lexer);
 

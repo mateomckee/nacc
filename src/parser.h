@@ -50,7 +50,7 @@ typedef enum {
 } TypeKind;
 
 //tree structure
-typedef struct {
+typedef struct ASTNode {
     NodeKind kind;
     TypeKind type; //used only for nodes that hold a type (NODE_FUNC, NODE_DECL, NODE_PARAM), otherwise goes unused, will be helpful later in sema.c when checking types, and implementing the symbol table
 
@@ -70,3 +70,5 @@ typedef struct {
 void parser_init(Parser* parser, Lexer* lexer);
 ASTNode* parse_program(Parser* parser);
 void print_ast(ASTNode* node, int depth);
+const char* node_kind_str(NodeKind kind); 
+const char* type_kind_str(TypeKind type);
