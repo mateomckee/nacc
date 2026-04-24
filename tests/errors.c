@@ -1,10 +1,21 @@
-int foo(int a) {
-    return a;
-}
 
+//hello 
 int main() {
-    int x = foo(1, 2);    
-    y = 5;               
-    int x = 10;         
+/*
+ *
+ *  hiii *** main()
+ */
+    int x = 10;
+
+    recurse(x);
+
     return 0;
 }
+
+void recurse(int n) {
+    if(n == 0) return;
+
+    printf("%d ", n);
+    recurse(n-1);
+}
+
