@@ -1,7 +1,6 @@
 
 int global_var = 100;
 
-
 int main(int argc) {
 
     int a = 10;
@@ -10,9 +9,12 @@ int main(int argc) {
 
     global_var = 10;
 
+
     if(a == b) {
-        
+        int b = 999;
+
     }
 
     return 0;
 }
+

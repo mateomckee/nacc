@@ -8,28 +8,35 @@
  * performs an AST tree walk, keeps track of scope via stack, validates and annotates ID nodes
  */
 
+int types_compatible(TypeKind a, TypeKind b) {
+    if (a == b) return 1;
+    //char and int are compatible
+    if ((a == TYPE_INT && b == TYPE_CHAR) || (a == TYPE_CHAR && b == TYPE_INT)) return 1;
+    return 0;
+}
+
 //symbol helpers
 
 FuncSymbol make_func_symbol(const char* start, int length, TypeKind return_type) {
-    FuncSymbol* func_symbol = nacc_malloc(sizeof(FuncSymbol));
-    func_symbol->start = start;
-    func_symbol->length = length;
+    FuncSymbol func_symbol;
+    func_symbol.start = start;
+    func_symbol.length = length;
 
-    func_symbol->return_type = return_type;
-    func_symbol->param_count = 0;
+    func_symbol.return_type = return_type;
+    func_symbol.param_count = 0;
 
-    return *func_symbol;
+    return func_symbol;
 }
 
 Symbol make_symbol(const char* start, int length, TypeKind type, int is_global) {
-    Symbol* symbol = nacc_malloc(sizeof(Symbol));
-    symbol->start = start;
-    symbol->length = length;
+    Symbol symbol;
+    symbol.start = start;
+    symbol.length = length;
 
-    symbol->type = type;
-    symbol->is_global = is_global;
+    symbol.type = type;
+    symbol.is_global = is_global;
 
-    return *symbol;
+    return symbol;
 }
 
 //scope helpers
@@ -42,6 +49,9 @@ Scope* make_scope(Scope* parent) {
 }
 
 void pop_scope(Sema* sema) {
+    if(sema->current_scope->parent == NULL) {
+        error(sema->current_line, "attempting to pop global scope");
+    }
     sema->current_scope = sema->current_scope->parent;
     sema->depth--;
 }
@@ -57,24 +67,30 @@ void push_scope(Sema* sema) {
 
 //AST walk actions
 
+Symbol* lookup_symbol_in_scope(Scope* scope, const char* start, int length) {
+    int count = scope->count;
+    int i;
+    for(i = 0; i < count; i++) {
+        Symbol symbol_at = scope->symbols[i];
+        if(symbol_at.length == length && strncmp(symbol_at.start, start, length) == 0) {
+            return &scope->symbols[i];
+        }
+    }
+
+    return NULL;
+}
+
 //searches scope stack for declared symbol
 Symbol* lookup_symbol(Sema* sema, const char* start, int length) {
     Scope* scope = sema->current_scope;
 
     //iterate through all scopes, starting at most local scope down to global scope
     while(scope != NULL) {
-        //in this scope, iterate through all symbols and look for a match
-        int count = scope->count;
-        int i;
-        for(i = 0; i < count; i++) {
-            Symbol symbol_at = scope->symbols[i];
-            
-            //compare strings and length for a perfect match
-            if(symbol_at.length == length && strncmp(symbol_at.start, start, length) == 0) {
-                return &scope->symbols[i];
-            }
+        Symbol* found_symbol = lookup_symbol_in_scope(scope, start, length);
+        if(found_symbol != NULL) {
+            return found_symbol;
         }
-        
+
         //next higher scope
         scope = scope->parent;
     }
@@ -83,7 +99,7 @@ Symbol* lookup_symbol(Sema* sema, const char* start, int length) {
 
 //creates and places a new symbol into the scope stack at the current scope
 void declare_symbol(Sema* sema, Symbol symbol) {
-    Symbol* found_symbol = lookup_symbol(sema, symbol.start, symbol.length);
+    Symbol* found_symbol = lookup_symbol_in_scope(sema->current_scope, symbol.start, symbol.length);
     if(found_symbol != NULL) {
         error(sema->current_line, "redeclaration of '%.*s'", symbol.length, symbol.start);
 
@@ -96,9 +112,17 @@ void declare_symbol(Sema* sema, Symbol symbol) {
 
 //searches sema->functions array for a declare function symbol
 FuncSymbol* lookup_function(Sema* sema, const char* start, int length) {
-    FuncSymbol* func_symbol = NULL;
+    int count = sema->func_count;
+    int i;
+    for(i = 0; i < count; i++) {
+        FuncSymbol symbol_at = sema->functions[i];
 
-    return func_symbol;
+        if(symbol_at.length == length && strncmp(symbol_at.start, start, length) == 0) {
+            return &sema->functions[i];
+        }
+    }
+
+    return NULL;
 }
 
 //
@@ -107,9 +131,21 @@ void sema_init(Sema* sema) {
     //create global scope
     sema->current_scope = make_scope(NULL); //global scope has no parent
     sema->current_return = TYPE_NONE;
+    sema->current_func_name_len = 0;
     sema->depth = 0;
     
     sema->func_count = 0;
+
+    //manually add printf/scanf function symbols for later use. this is just for my subset of C
+
+    FuncSymbol printf_symbol = make_func_symbol("printf", 6, TYPE_INT);
+    printf_symbol.param_count = -1; //variadic function
+    sema->functions[sema->func_count++] = printf_symbol;
+
+    FuncSymbol scanf_symbol = make_func_symbol("scanf", 5, TYPE_INT);
+    scanf_symbol.param_count = -1; //variadic function
+    sema->functions[sema->func_count++] = scanf_symbol;
+
 }
 
 //first pass:
@@ -118,6 +154,10 @@ void collect_functions(Sema* sema, ASTNode* root) {
     ASTNode* node = root->left;
 
     while(node != NULL) {
+        if(sema->func_count >= MAX_FUNC) {
+            error(node->token.line, "program exceeded maximum number of functions: %d", MAX_FUNC);
+        }
+
         //load
         FuncSymbol func_symbol = make_func_symbol(node->token.start, node->token.length, node->type);
         
@@ -134,9 +174,6 @@ void collect_functions(Sema* sema, ASTNode* root) {
         }
 
         //store
-        if(sema->func_count >= MAX_FUNC) {
-            error(node->token.line, "program exceeded maximum number of functions: %d", MAX_FUNC);
-        }
         sema->functions[sema->func_count++] = func_symbol;
 
         //move on to sibling function
@@ -155,15 +192,28 @@ void sema_node(Sema* sema, ASTNode* node) {
 
     switch(node->kind) {
         //simply start by walking first function and first global variable
-        case NODE_PROGRAM :
+        case NODE_PROGRAM : {
             //first walk global variables
-            sema_node(sema, node->right);
+            ASTNode* global = node->right;
+            while(global != NULL) {
+                sema_node(sema, global);
+                global = global->next;
+            }
+
             //then walk functions
-            sema_node(sema, node->left);    
+            ASTNode* func = node->left;
+            while(func != NULL) {
+                sema_node(sema, func);
+                func = func->next;
+            }
             break;
+        }
         //set current_return, push scope for params, declare params, walk body, pop scope
         case NODE_FUNC:
             //sets current_return to the function ASTNode's type parameter, used specifically for this purpose
+            //also sets func name for debugging purposes
+            sema->current_func_name = node->token.start;
+            sema->current_func_name_len = node->token.length;
             sema->current_return = node->type;
 
             push_scope(sema);
@@ -180,10 +230,6 @@ void sema_node(Sema* sema, ASTNode* node) {
 
             //pop scope
             pop_scope(sema);
-
-            //walk sibling function, same scope
-            sema_node(sema, node->next);
-
             break;
         //push scope for local vars, walk statements
         case NODE_BLOCK:
@@ -218,8 +264,8 @@ void sema_node(Sema* sema, ASTNode* node) {
             sema_node(sema, node->left);
 
             //check for matching return types (function and return statement)
-            if(sema->current_return != node->left->type) {
-                error(node->token.line, "mismatched return types");
+            if(node->left != NULL && sema->current_return != node->left->type) {
+                error(node->token.line, "return type does not match function '%.*s', expected %s but got %s", sema->current_func_name_len, sema->current_func_name, type_kind_str(sema->current_return), type_kind_str(node->left->type));
             }
 
             break;
@@ -236,8 +282,12 @@ void sema_node(Sema* sema, ASTNode* node) {
             sema_node(sema, node->right);            
 
             //check type compatability between left and right
-
+            if(!types_compatible(node->left->type, node->right->type)) {
+                error(node->token.line, "incompatible types in assignment");
+            }
+                
             //annotate node type with left nodes type
+            node->type = node->left->type;
 
             break;
         case NODE_BINOP :
@@ -245,17 +295,85 @@ void sema_node(Sema* sema, ASTNode* node) {
             sema_node(sema, node->right);
 
             //determine result type from operands
-
-            //annotate node type
-
+            //currently, all paths return TYPE_INT, but i built this switch for future extensibility (pointer arithmetic, etc)
+            switch(node->token.kind) {
+                case TOK_LT:
+                    node->type = TYPE_INT;
+                    break;
+                case TOK_GT:
+                    node->type = TYPE_INT;
+                    break;
+                case TOK_LTE:
+                    node->type = TYPE_INT;
+                    break;
+                case TOK_GTE:
+                    node->type = TYPE_INT;
+                    break;
+                case TOK_EQEQ:
+                    node->type = TYPE_INT;
+                    break;
+                case TOK_NEQ:
+                    node->type = TYPE_INT;
+                    break;
+                case TOK_AND:
+                    node->type = TYPE_INT;
+                    break;
+                case TOK_OR:
+                    node->type = TYPE_INT;
+                    break;
+                default:
+                    node->type = TYPE_INT;
+                    break;
+            }
             break;
         case NODE_UNOP : 
             sema_node(sema, node->left);
 
             //determine type based on operator and operand type
-
-            //annotate node type
-
+            switch(node->token.kind) {
+                case TOK_MINUS :
+                    node->type = node->left->type;
+                    break;
+                case TOK_NOT :
+                    node->type = TYPE_INT;
+                    break;
+                case TOK_PLUSPLUS :
+                    node->type = node->left->type;
+                    break;
+                case TOK_MINUSMINUS :
+                    node->type = node->left->type;
+                    break;
+                //return type of dereference
+                case TOK_STAR :
+                    switch(node->left->type) {
+                        case TYPE_INT_PTR :
+                            node->type = TYPE_INT;
+                            break;
+                        case TYPE_CHAR_PTR :
+                            node->type = TYPE_CHAR;
+                            break;
+                        default :
+                            error(node->token.line, "dereferencing non-pointer type");
+                            break;
+                    }
+                    break;
+                //return type of reference
+                case TOK_AMPERSAND :
+                     switch(node->left->type) {
+                        case TYPE_INT :
+                            node->type = TYPE_INT_PTR;
+                            break;
+                        case TYPE_CHAR :
+                            node->type = TYPE_CHAR_PTR;
+                            break;
+                        default :
+                            error(node->token.line, "taking address of non-scalar type");
+                            break;
+                    }
+                    break;
+                default :
+                    break;
+            }
             break;
         case NODE_CALL : {
             FuncSymbol* func_symbol = lookup_function(sema, node->token.start, node->token.length);
@@ -263,14 +381,40 @@ void sema_node(Sema* sema, ASTNode* node) {
                 error(node->token.line, "undeclared function '%.*s'", node->token.length, node->token.start);
             }
 
-            //check argument count matches parameter count
-
             //walk each argument and check type against parameter type
+            int i = 0;
+            ASTNode* node_arg = node->left;
+            while(node_arg != NULL) {
+                //crucial, walk arg before checking
+                sema_node(sema, node_arg);
+
+                //if non-variadic function has more arguments than the function has parameters
+                if(func_symbol->param_count != -1 && i >= func_symbol->param_count) {
+                    error(node->token.line, "too many arguments to function '%.*s'", func_symbol->length, func_symbol->start);
+                }
+
+                TypeKind param_type = func_symbol->param_types[i];
+                TypeKind arg_type = node_arg->type;
+
+                //check types of this arg with that of corresponding function parameter
+                if(func_symbol->param_count != -1 && !types_compatible(param_type, arg_type)) {
+                    error(node->token.line, "incompatible type for argument %d of '%.*s'", i+1, func_symbol->length, func_symbol->start);
+                }
+
+                //move on to next arg
+                node_arg = node_arg->next;
+                i++;
+            }
+
+            //if num of args and num of parameters dont match. skip variadic functions (functions that param_count == -1)
+            if(func_symbol->param_count != -1 && i < func_symbol->param_count) {
+                error(node->token.line, "too few arguments to function '%.*s', expected %d but got %d", func_symbol->length, func_symbol->start, func_symbol->param_count, i);
+            }
 
             //annotate node type with function return type
-           
-        }
+            node->type = func_symbol->return_type;
             break;
+        }
         case NODE_IDENT : {
             Symbol* symbol = lookup_symbol(sema, node->token.start, node->token.length);
             if(symbol == NULL) {
@@ -285,7 +429,7 @@ void sema_node(Sema* sema, ASTNode* node) {
             sema_node(sema, node->left);
 
             //annotate same type as operand 
-
+            node->type = node->left->type;
             break;
         case NODE_INT_LIT :
             node->type = TYPE_INT;
@@ -300,7 +444,6 @@ void sema_node(Sema* sema, ASTNode* node) {
 
             break;
         default:
-            error(node->token.line, "unknown AST node kind");
             break;
     }
 }

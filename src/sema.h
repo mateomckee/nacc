@@ -40,6 +40,8 @@ typedef struct {
     int depth;
     Scope* current_scope; //most local scope
     TypeKind current_return; //return type of function being walked
+    const char* current_func_name;
+    int current_func_name_len;
     
     //function symbols
     int func_count;

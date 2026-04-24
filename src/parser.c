@@ -178,6 +178,7 @@ ASTNode* parse_primary(Parser* parser) {
                 call->left = args;
                 return call;
             }
+            //postfix
             else if(check(parser, TOK_PLUSPLUS) || check(parser, TOK_MINUSMINUS)) {
                 advance(parser);
                 Token operator = parser->previous_token;
@@ -188,6 +189,7 @@ ASTNode* parse_primary(Parser* parser) {
             return ident;
         }
         default :
+            printf("parse_primary default: kind=%s\n", token_kind_str(kind));
             error(token.line, "expected expression");
             return NULL;
     }
@@ -654,6 +656,7 @@ const char* type_kind_str(TypeKind kind) {
         case TYPE_VOID:     return "void";
         case TYPE_INT_PTR:  return "int*";
         case TYPE_CHAR_PTR: return "char*";
+        case TYPE_VOID_PTR: return "void*";
         default:            return "unknown";
     }
 }
