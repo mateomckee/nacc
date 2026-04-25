@@ -186,8 +186,6 @@ void collect_functions(Sema* sema, ASTNode* root) {
 void sema_node(Sema* sema, ASTNode* node) {
     if(node == NULL) return;
 
-    printf("sema: %s '%.*s'\n", node_kind_str(node->kind), node->token.length, node->token.start);
-
     sema->current_line = node->token.line;
 
     switch(node->kind) {
