@@ -55,8 +55,8 @@ typedef struct {
     //instructions are stored as a dynamic array
     TACInstr* instructions;
     //number of instructions
-    int count;
-    int capacity; //alocated size
+    unsigned int count;
+    unsigned int capacity; //alocated size
 
     //keep track of temporary/label numbers (t0, t1, l0 l1, etc.)
     int temp_count;

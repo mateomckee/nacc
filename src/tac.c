@@ -35,7 +35,7 @@ void emit(TACGen* tac, TACKind kind, char* result, char* op1, char* op2) {
 
 void tac_init(TACGen* tac) {
     tac->capacity = TAC_CAPACITY;
-    tac->instructions = nacc_malloc(sizeof(TACInstr) * (size_t)tac->capacity);
+    tac->instructions = nacc_malloc(sizeof(TACInstr) * tac->capacity);
 
     tac->count = 0;
     tac->temp_count = 0;
@@ -50,11 +50,68 @@ void tac_node(TACGen* tac, ASTNode* node) {
 
     printf("tac: %s '%.*s'\n", node_kind_str(node->kind), node->token.length, node->token.start);
 
-    tac_node(tac, node->left);
-    tac_node(tac, node->right);
-    tac_node(tac, node->extra);
-    tac_node(tac, node->extra2);
-    tac_node(tac, node->next);
+    switch(node->kind) {
+        //nodes that just walk the tree:
+        case NODE_PROGRAM : {
+            //walk global vars
+            ASTNode* global_node = node->right;
+            while(global_node != NULL) {
+                tac_node(tac, global_node);
+                global_node = global_node->next;
+            }
+
+            //walk functions
+            ASTNode* func_node = node->left;
+            while(func_node != NULL) {
+                tac_node(tac, func_node);
+                func_node = func_node->next;
+            }
+            break;
+        }
+        case NODE_BLOCK :
+            break;
+        
+        //nodes that generate TAC instructions:
+        //func begin/end markers
+        case NODE_FUNC :
+            break;
+        //labels and jumps
+        case NODE_IF:
+            break;
+        case NODE_WHILE :
+            break;
+        case NODE_FOR :
+            break;
+
+        case NODE_DECL : //assignment if initialized
+            break;
+        case NODE_ASSIGN :
+            break;
+        case NODE_CALL : //params + call
+            break;
+        case NODE_RETURN :
+            break;
+        
+        case NODE_BINOP :
+            break;
+        case NODE_UNOP :
+            break;
+        case NODE_POSTFIX :
+            break;
+
+        //only return operand strings
+        case NODE_INT_LIT :
+            break;
+        case NODE_CHAR_LIT :
+            break;
+        case NODE_STRING_LIT :
+            break;
+        case NODE_IDENT :
+            break;
+
+        default:
+            break;
+    }
 }
 
 void print_tac(TACGen* tac) {
