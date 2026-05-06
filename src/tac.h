@@ -3,6 +3,7 @@
 #define TAC_NAME_MAX 64
 
 typedef enum {
+    TAC_NONE, //sentinel value
     TAC_ASSIGN,
 
     //arithmetic operators
@@ -64,5 +65,5 @@ typedef struct {
 } TACGen;
 
 void tac_init(TACGen* tac);
-void tac_node(TACGen* rac, ASTNode* node);
+char* tac_node(TACGen* rac, ASTNode* node);
 void print_tac(TACGen* tac);
