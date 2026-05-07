@@ -16,12 +16,18 @@ char* make_label(TACGen* tac) {
     return label;
 }
 
+char* make_str(TACGen* tac) {
+    char* str = nacc_malloc(TAC_NAME_MAX);
+    snprintf(str, TAC_NAME_MAX, "str%d", tac->str_count++);
+    return str;
+}
+
 //add instruction to TAC instructions array
 void emit(TACGen* tac, TACKind kind, char* result, char* op1, char* op2) {
     //if reached instruction capacity, double the capacity
     if(tac->count >= tac->capacity) {
         tac->capacity *= 2;
-        tac->instructions = nacc_realloc(tac->instructions, tac->capacity); //handles out of memory
+        tac->instructions = nacc_realloc(tac->instructions, sizeof(TACInstr) * tac->capacity); //handles out of memory
     }
 
     TACInstr new_instruction;
@@ -40,6 +46,7 @@ void tac_init(TACGen* tac) {
     tac->count = 0;
     tac->temp_count = 0;
     tac->label_count = 0;
+    tac->str_count = 0;
 }
 
 //same concept as previous step (semantic analysis), recursively walk the AST (DFS), performing certain TAC generation actions depending on the ASTNode kind
@@ -48,8 +55,6 @@ void tac_init(TACGen* tac) {
 char* tac_node(TACGen* tac, ASTNode* node) {
     if(node == NULL) return NULL;
 
-    printf("tac: %s '%.*s'\n", node_kind_str(node->kind), node->token.length, node->token.start);
-
     switch(node->kind) {
         //statement nodes, no return value
         //nodes that just walk the tree:
@@ -57,7 +62,13 @@ char* tac_node(TACGen* tac, ASTNode* node) {
             //walk global vars
             ASTNode* global_node = node->right;
             while(global_node != NULL) {
-                tac_node(tac, global_node);
+                char* global_name = nacc_malloc(TAC_NAME_MAX);
+                snprintf(global_name, TAC_NAME_MAX, "%.*s", global_node->token.length, global_node->token.start);
+
+                char* init = tac_node(tac, global_node->left);
+
+                emit(tac, TAC_GLOBAL, global_name, init, NULL);
+
                 global_node = global_node->next;
             }
 
@@ -80,31 +91,120 @@ char* tac_node(TACGen* tac, ASTNode* node) {
         }
         //nodes that generate TAC instructions:
         //func begin/end markers
-        case NODE_FUNC :
-            tac_node(tac, node->left); //walk params
+        case NODE_FUNC : {
+            char* name = nacc_malloc(TAC_NAME_MAX);
+            snprintf(name, TAC_NAME_MAX, "%.*s", node->token.length, node->token.start);
 
-            //begin marker
+            //start marker
+            emit(tac, TAC_FUNC_BEGIN, name, NULL, NULL);
 
             tac_node(tac, node->right); //walk body
 
-            //end marker
-            return NULL;
-        //labels and jumps
-        case NODE_IF:
-            tac_node(tac, node->left);
-            tac_node(tac, node->right);
-            tac_node(tac, node->extra);
-            
-            return NULL;
-        case NODE_WHILE :
-            return NULL;
-        case NODE_FOR :
-            return NULL;
-        case NODE_RETURN :
-            return NULL;
-        case NODE_DECL : //assignment if initialized
-            return NULL;
+            //end marker 
+            emit(tac, TAC_FUNC_END, name, NULL, NULL);
 
+            return NULL;
+        }
+        //labels and jumps
+        case NODE_IF: {
+            int hasElse = (node->extra == NULL) ? 0 : 1;
+
+            char* l_else = make_label(tac);
+            char* l_end = make_label(tac);
+            
+            //if no else statement, make the else label the end label
+            if(!hasElse) l_else = l_end;
+
+            //get condition
+            char* cond = tac_node(tac, node->left);
+
+            //if false, skip to else block (or end if no else block)
+            emit(tac, TAC_JUMP_FALSE, l_else, cond, NULL);
+
+            tac_node(tac, node->right);
+
+            emit(tac, TAC_JUMP, l_end, NULL, NULL);
+
+            //only generate this if theres an else block
+            if(hasElse) {
+                emit(tac, TAC_LABEL, l_else, NULL, NULL);
+
+                tac_node(tac, node->extra);
+            }
+
+            emit(tac, TAC_LABEL, l_end, NULL, NULL);
+
+            return NULL;
+        }
+        case NODE_WHILE : {
+            char* l_start = make_label(tac);
+            char* l_end = make_label(tac);
+
+            //loop start label
+            emit(tac, TAC_LABEL, l_start, NULL, NULL);
+
+            //check condition, jump to end if false, continue to body if true
+            char* cond = tac_node(tac, node->left);
+            emit(tac, TAC_JUMP_FALSE, l_end, cond, NULL);
+
+            //walk body
+            tac_node(tac, node->right);
+
+            //jump to start of loop
+            emit(tac, TAC_JUMP, l_start, NULL, NULL);
+
+            //end of loop
+            emit(tac, TAC_LABEL, l_end, NULL, NULL);
+
+            return NULL;
+        }
+        case NODE_FOR : {
+            char* l_start = make_label(tac);
+            char* l_end = make_label(tac);
+
+            //init
+            tac_node(tac, node->left);
+
+            //start loop
+            emit(tac, TAC_LABEL, l_start, NULL, NULL);
+
+            char* cond = tac_node(tac, node->right);
+
+            emit(tac, TAC_JUMP_FALSE, l_end, cond, NULL);
+
+            //loop body
+            tac_node(tac, node->extra);
+
+            //post
+            tac_node(tac, node->extra2);
+
+            //loop
+            emit(tac, TAC_JUMP, l_start, NULL, NULL);
+            
+            //end loop
+            emit(tac, TAC_LABEL, l_end, NULL, NULL);
+
+            return NULL;
+        }
+        case NODE_RETURN : {
+            char* val = tac_node(tac, node->left);
+            //ok if null, handled in codegen. place in op1, not result
+            emit(tac, TAC_RETURN, NULL, val, NULL);
+            return NULL;
+        }
+        case NODE_DECL : {
+            //nothing to emit, variable just exists, codegen handles allocation in stack space
+            //only handle initialization
+            if (node->left != NULL) {
+                char* left = tac_node(tac, node->left);
+
+                char* name = nacc_malloc(TAC_NAME_MAX);
+                snprintf(name, TAC_NAME_MAX, "%.*s", node->token.length, node->token.start);
+            
+                emit(tac, TAC_ASSIGN, name, left, NULL);    
+            }
+            return NULL;
+        }
         //expression statements, returns operand string
         case NODE_BINOP: {
             char* left = tac_node(tac, node->left);
@@ -123,7 +223,7 @@ char* tac_node(TACGen* tac, ASTNode* node) {
                 case TOK_GTE: kind = TAC_GTE; break;
                 case TOK_LTE: kind = TAC_LTE; break;
                 case TOK_EQEQ: kind = TAC_EQEQ;break;
-                case TOK_NOT: kind = TAC_NEQ; break;
+                case TOK_NEQ: kind = TAC_NEQ; break;
                 case TOK_AND: kind = TAC_AND; break;
                 case TOK_OR: kind = TAC_OR;  break;
                 default: kind = TAC_ADD; break;
@@ -153,7 +253,7 @@ char* tac_node(TACGen* tac, ASTNode* node) {
             emit(tac, kind, temp, left, right);
 
             //if ++/-- (prefix), assign after increment/decrement
-            if(kind == TAC_ADD || kind == TAC_SUB) {
+            if(node->token.kind == TOK_PLUSPLUS || node->token.kind == TOK_MINUSMINUS) {
                 char* name = nacc_malloc(TAC_NAME_MAX);
                 snprintf(name, TAC_NAME_MAX, "%.*s", node->left->token.length, node->left->token.start);
                 emit(tac, TAC_ASSIGN, name, temp, NULL);
@@ -218,16 +318,49 @@ char* tac_node(TACGen* tac, ASTNode* node) {
             emit(tac, TAC_ASSIGN, name, right, NULL);
             return name;
         }
-        case NODE_CALL : //params + call
-            return NULL;
+        case NODE_CALL : {
+            char* func_name = nacc_malloc(TAC_NAME_MAX);
+            snprintf(func_name, TAC_NAME_MAX, "%.*s", node->token.length, node->token.start);
+
+            int argc = 0;
+            //emit TAC_ARG for each arg
+            ASTNode* arg = node->left;
+            while(arg != NULL) {
+                char* arg_name = tac_node(tac, arg);
+                emit(tac, TAC_ARG, arg_name, NULL, NULL);
+                arg = arg->next;
+                argc++;
+            }
+
+            //convert argc to string
+            char argc_str[TAC_NAME_MAX];
+            snprintf(argc_str, TAC_NAME_MAX, "%d", argc);
+
+            //temp carries return value
+            char* temp = make_temp(tac);
+
+            //emit TAC_CALL: return value in result, function name in op1, arg count in op2
+            emit(tac, TAC_CALL, temp, func_name, argc_str);
+
+            //return temp
+            return temp;
+        }
         //only return operand strings
         case NODE_INT_LIT :
         case NODE_CHAR_LIT :
-        case NODE_STRING_LIT :
         case NODE_IDENT : {
             char* result = nacc_malloc(TAC_NAME_MAX);
             snprintf(result, TAC_NAME_MAX, "%.*s", node->token.length, node->token.start);
             return result;
+        }
+        case NODE_STRING_LIT : {
+            char* result = nacc_malloc(TAC_NAME_MAX);
+            snprintf(result, TAC_NAME_MAX, "%.*s", node->token.length, node->token.start);
+            
+            //key for string literals, emit as TAC_GLOBALS, and codegen will pick them up and place them in .rodata
+            char* str = make_str(tac);
+            emit(tac, TAC_GLOBAL, str, result, NULL);
+            return str;
         }
         default:
             return NULL;
@@ -257,7 +390,7 @@ const char* tac_kind_str(TACKind kind) {
         case TAC_JUMP:        return "JUMP";
         case TAC_JUMP_TRUE:   return "JUMP_TRUE";
         case TAC_JUMP_FALSE:  return "JUMP_FALSE";
-        case TAC_PARAM:       return "PARAM";
+        case TAC_ARG:         return "ARG";
         case TAC_CALL:        return "CALL";
         case TAC_RETURN:      return "RETURN";
         case TAC_FUNC_BEGIN:  return "FUNC_BEGIN";
@@ -268,11 +401,58 @@ const char* tac_kind_str(TACKind kind) {
 }
 
 void print_tac(TACGen* tac) {
-    printf("TAC:\n");
-    int count = tac->count;
-    int i;
-    for(i = 0; i < count; i++) {
-        TACInstr instruction = tac->instructions[i];
-        printf("%s = %s %s %s\n", instruction.result, instruction.op1, tac_kind_str(instruction.kind), instruction.op2);    
+    unsigned int i;
+    for(i = 0; i < tac->count; i++) {
+        TACInstr* in = &tac->instructions[i];
+        switch(in->kind) {
+            case TAC_FUNC_BEGIN:
+                printf("\n[%s]\n", in->result);
+                break;
+            case TAC_FUNC_END:
+                printf("[end %s]\n", in->result);
+                break;
+            case TAC_LABEL:
+                printf("%s:\n", in->result);
+                break;
+            case TAC_JUMP:
+                printf("    goto %s\n", in->result);
+                break;
+            case TAC_JUMP_FALSE:
+                printf("    if !%s goto %s\n", in->op1, in->result);
+                break;
+            case TAC_JUMP_TRUE:
+                printf("    if %s goto %s\n", in->op1, in->result);
+                break;
+            case TAC_ASSIGN:
+                printf("    %s = %s\n", in->result, in->op1);
+                break;
+            case TAC_RETURN:
+                printf("    return %s\n", in->op1);
+                break;
+            case TAC_ARG:
+                printf("    arg %s\n", in->result);
+                break;
+            case TAC_CALL:
+                printf("    %s = call %s (%s args)\n", in->result, in->op1, in->op2);
+                break;
+            case TAC_GLOBAL:
+                printf("    global %s = \"%s\"\n", in->result, in->op1);
+                break;
+            case TAC_NEG:
+                printf("    %s = -%s\n", in->result, in->op1);
+                break;
+            case TAC_NOT:
+                printf("    %s = !%s\n", in->result, in->op1);
+                break;
+            case TAC_DEREF:
+                printf("    %s = *%s\n", in->result, in->op1);
+                break;
+            case TAC_ADDR:
+                printf("    %s = &%s\n", in->result, in->op1);
+                break;
+            default:
+                printf("    %s = %s %s %s\n", in->result, in->op1, tac_kind_str(in->kind), in->op2);
+                break;
+        }
     }
 }

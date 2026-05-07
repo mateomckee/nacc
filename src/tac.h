@@ -34,7 +34,7 @@ typedef enum {
     TAC_FUNC_BEGIN,
     TAC_FUNC_END,
 
-    TAC_PARAM, //push arg1 as next argument
+    TAC_ARG, //push arg1 as next argument
     TAC_CALL,
     TAC_RETURN,
 
@@ -62,6 +62,7 @@ typedef struct {
     //keep track of temporary/label numbers (t0, t1, l0 l1, etc.)
     int temp_count;
     int label_count;
+    int str_count;
 } TACGen;
 
 void tac_init(TACGen* tac);
