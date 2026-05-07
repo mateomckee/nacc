@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "sema.h"
+#include "tac.h"
 
-// simple function to take file contents and return them as a string
-char* read_file(const char* filepath) {
+//simple function to take file contents and return them as a string
+char* get_file_as_string(const char* filepath) {
     FILE* f = fopen(filepath, "r");
 
     if (!f) {
@@ -23,43 +23,46 @@ char* read_file(const char* filepath) {
     return output;
 }
 
-// quick tester main
 // pass in the filepath of the source program
 //  ../tests/count.c
-// currently just runs lexer and spits out tokens
 int main(int argc, char* argv[]) {
-
     if(argc < 2) {
         printf("Please provide the filepath of the source code\n");
         return 1;
     }
 
+    //get source program as a character stream
     const char* filepath = argv[1];
-    char* char_stream = read_file(filepath);
+    char* char_stream = get_file_as_string(filepath);
 
-    //lexer
+    //----- INIT -----
     Lexer lexer;
     lexer_init(&lexer, char_stream);
 
-    //parser
     Parser parser;
     parser_init(&parser, &lexer);
 
-    //semantic analysis
     Sema sema;
     sema_init(&sema);
 
+    TACGen tac;
+    tac_init(&tac);
+
+    //----- STEP 1 -----
+    //scan and parse source program, O(n)
     ASTNode* root = parse_program(&parser);
 
-    print_ast(root, 0);
+    //----- STEP 2 -----
+    //perform semantic analysis on AST, validate and annotate
+    collect_functions(&sema, root); //1st pass, collect and store program function signatures
+    sema_node(&sema, root); //2nd pass, walk AST tree and perform validation and annotation
 
-    //first pass sema
-    collect_functions(&sema, root);
-    //second pass sema
-    sema_node(&sema, root);
+    //----- STEP 3 -----
+    //produce TAC intermediate representation of code from annotated AST, architecture-independent
+    tac_node(&tac, root);    
 
-    //
-
+    print_tac(&tac);
+        
     free(char_stream);
 
     return 0;

@@ -173,7 +173,7 @@ ASTNode* parse_primary(Parser* parser) {
             if(check(parser, TOK_LPAREN)) {
                 advance(parser); //consume '('
                 ASTNode* args = parse_args(parser);
-                expect(parser, TOK_RPAREN, "expected \')\' after parameters");
+                expect(parser, TOK_RPAREN, "expected \')\' after arguments");
                 ASTNode* call = make_node(NODE_CALL, token);
                 call->left = args;
                 return call;
