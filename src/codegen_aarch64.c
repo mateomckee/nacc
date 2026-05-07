@@ -1,8 +1,7 @@
 #include "codegen_aarch64.h"
+#include <stdlib.h>
 
-
-void codegen_init(CodeGen* cg, TACGen* tac, FILE* out) {
-    cg->out = out;
+void codegen_init(CodeGen* cg, TACGen* tac) {
     cg->tac = tac;
 
     cg->var_count = 0;
@@ -37,7 +36,10 @@ void emit_global(CodeGen* cg, TACInstr) {
 
 
 //main codegen loop
-void codegen_run(CodeGen* cg) {
+void codegen_run(CodeGen* cg, const char* output_filename) {
+    cg->out = fopen(output_filename, "w");
+    if(cg->out == NULL) { fprintf(stderr, "could not open file %s\n", output_filename); exit(1); }
+
     //fist pass: emit all globals and string literals
     int i;
     int instr_count = cg->tac->count;
@@ -52,5 +54,7 @@ void codegen_run(CodeGen* cg) {
     //second pass: emit code
     
 
-
+    //close immediately after finishing
+    fclose(cg->out);
 }
+

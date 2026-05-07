@@ -4,7 +4,7 @@
 #include "codegen_aarch64.h"
 
 //simple function to take file contents and return them as a string
-char* get_file_as_string(const char* filepath) {
+const char* get_file_as_string(const char* filepath) {
     FILE* f = fopen(filepath, "r");
 
     if (!f) {
@@ -24,7 +24,7 @@ char* get_file_as_string(const char* filepath) {
     return output;
 }
 
-FILE* get_output_file(const char* input_filepath) {
+const char* get_output_filename(const char* input_filepath) {
     //basename
     char* basename;
     //string split token
@@ -39,16 +39,23 @@ FILE* get_output_file(const char* input_filepath) {
     //grab first split, filename before extension
     char* name = strtok(basename, ".");
 
-    char* output_filename = strcat(name, ".s");
+    const char* output_filename = strcat(name, ".s");
 
-    FILE* out = fopen(output_filename, "w");
-    if(out == NULL) {
-        fprintf(stderr, "could not open file %s\n", name);
-        exit(1);
+    return output_filename;
+}
+
+
+void print_file(const char* filename) {
+    FILE* out = fopen(filename, "r");
+
+    char ch;
+    while ((ch = fgetc(out)) != EOF) {
+        printf("%c", ch);
     }
 
-    return out;
+    fclose(out);
 }
+
 
 // pass in the filepath of the source program
 //  ../tests/count.c
@@ -58,12 +65,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    //get source program as a character stream
-    const char* filepath = argv[1];
-    char* char_stream = get_file_as_string(filepath);
+    const char* input_filepath = argv[1];
 
-    //open output file for codegen
-    FILE* out = get_output_file(filepath);
+    const char* char_stream = get_file_as_string(input_filepath);
+    const char* output_filename = get_output_filename(input_filepath);
 
     //init
     Lexer lexer;
@@ -79,7 +84,7 @@ int main(int argc, char* argv[]) {
     tac_init(&tac);
 
     CodeGen cg;
-    codegen_init(&cg, &tac, out);
+    codegen_init(&cg, &tac);
 
     //step 1
     //scan and parse source program, O(n)
@@ -94,14 +99,15 @@ int main(int argc, char* argv[]) {
     //produce TAC intermediate representation of code from annotated AST, architecture-independent
     tac_node(&tac, root);    
 
-    print_tac(&tac);
+    //print_tac(&tac);
 
     //step 4
-    //walk linear TAC code and print AArch64 assembly into output file
-    codegen_run(&cg);    
+    //walk linear TAC code and print AArch64 assembly into output file. codegen_run encompasses file lifetime
+    codegen_run(&cg, output_filename);    
+
+    print_file(output_filename);
 
     free(char_stream);
-    fclose(out);
 
     return 0;
 }

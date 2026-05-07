@@ -23,5 +23,6 @@ typedef struct {
     int frame_size; //total stack frame size (current function)
 } CodeGen;
 
-void codegen_init(CodeGen* cg, TACGen* tac, FILE* out);
-void codegen_run(CodeGen* cg);
+void codegen_init(CodeGen* cg, TACGen* tac);
+void codegen_run(CodeGen* cg, const char* output_filename);
+void print_codegen(const char* output_filename);
