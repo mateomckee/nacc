@@ -271,8 +271,15 @@ void sema_node(Sema* sema, ASTNode* node) {
             int is_global = sema->depth == 0 ? 1 : 0;
             //declare symbol (handles duplicates)
             declare_symbol(sema, make_symbol(node->token.start, node->token.length, node->type, is_global));
-            //walk initialization if any
+
+            //walk initialization if any, to annotate its type
             sema_node(sema, node->left);
+
+            //check type compatability between declaration and initialization
+            if(!types_compatible(node->type, node->left->type)) {
+                error(node->token.line, "incompatible types in assignment");
+            }
+
             break;
         }
         case NODE_ASSIGN :

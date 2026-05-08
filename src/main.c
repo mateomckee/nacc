@@ -101,7 +101,7 @@ int main(int argc, char* argv[]) {
     //produce TAC intermediate representation of code from annotated AST, architecture-independent
     tac_node(&tac, root);    
 
-    //print_tac(&tac);
+    print_tac(&tac);
 
     //step 4
     //walk linear TAC code and print AArch64 assembly into output file. codegen_run encompasses file lifetime

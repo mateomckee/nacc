@@ -24,6 +24,7 @@ typedef struct {
     TACGen* tac; //tac to consume
 
     VarEntry* vars; //var entries (current function)
+    char current_func[TAC_NAME_MAX];
     int var_count; //num of vars (current function)
     int frame_size; //total stack frame size (current function)
 } CodeGen;

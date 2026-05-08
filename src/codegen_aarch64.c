@@ -8,15 +8,40 @@ int align16(int size) {
     return (size + 15) & ~15;
 }
 
+//load an operand into a register
+//handles both immediate values and variables
+void load_operand(CodeGen* cg, char* operand, int reg) {
+    if (operand == NULL || *operand == '\0') return;
+
+    //check if it's a number (immediate)
+    char* endptr;
+    strtol(operand, &endptr, 10);
+    if (*endptr == '\0') {
+        //immediate value
+        fprintf(cg->out, "\tmov w%d, #%s\n", reg, operand);
+    } else {
+        //variable, load from stack
+        int offset = find_var(cg, operand);
+        fprintf(cg->out, "\tldr w%d, [sp, #%d]\n", reg, offset);
+    }
+}
+
+//store a register to a variables stack slot
+void store_result(CodeGen* cg, char* result, int reg) {
+    if (result == NULL || *result == '\0') return;
+    int offset = find_var(cg, result);
+    fprintf(cg->out, "\tstr w%d, [sp, #%d]\n", reg, offset);
+}
+
 //
 
 void codegen_init(CodeGen* cg, TACGen* tac) {
+    cg->vars = nacc_malloc(sizeof(VarEntry) * FUNC_MAX_VARS);
     cg->tac = tac;
 
     cg->var_count = 0;
     cg->frame_size = 0;
 }
-
 
 //variable table helper functions
 
@@ -65,13 +90,18 @@ int add_var(CodeGen* cg, char* name) {
         return existing_offset;
     }
 
+    if(cg->var_count >= FUNC_MAX_VARS) {
+        error(-1, "codegen: exceeded maximum variables in function '%s'\n", name);
+        return -1;
+    }
+
     //new variable entry
     VarEntry new_var;
     strncpy(new_var.name, name, TAC_NAME_MAX); //set name
 
     new_var.offset = cg->var_count * WORD_SIZE;
-    cg->vars[cg->var_count] = new_var; //assign
 
+    cg->vars[cg->var_count] = new_var; //assign
     cg->var_count++;
 
     return new_var.offset;
@@ -79,6 +109,11 @@ int add_var(CodeGen* cg, char* name) {
 
 //scans TAC range (start, end) and builds var table
 void build_var_table(CodeGen* cg, int start) {
+    if(start < 0 || start > cg->tac->count) {
+        error(-1, "codegen: invalid start instruction index '%d' for building variable table\n", start);
+        return;
+    }
+
     //reset var count for each function
     cg->var_count = 0;
     
@@ -86,7 +121,7 @@ void build_var_table(CodeGen* cg, int start) {
     TACInstr instr = cg->tac->instructions[i];
 
     //scan all TAC instrutions in this function
-    while(instr.kind != TAC_FUNC_END) {
+    while(instr.kind != TAC_FUNC_END && i < cg->tac->count) {
         //handle special cases, and use default to handle the rest
         switch(instr.kind) {
             case TAC_CALL :
@@ -97,6 +132,9 @@ void build_var_table(CodeGen* cg, int start) {
             case TAC_JUMP : break; //only has result, which is a label, skip entirely
             case TAC_JUMP_FALSE :
                 if(is_var(instr.op1)) add_var(cg, instr.op1);
+                break;
+            case TAC_PARAM_DECL :
+                if(is_var(instr.result)) add_var(cg, instr.result);
                 break;
             case TAC_ARG :
                 if(is_var(instr.result)) add_var(cg, instr.result);
@@ -137,10 +175,38 @@ void emit_global(CodeGen* cg, TACInstr* instr) {
 
 }
 void emit_func_begin(CodeGen* cg, TACInstr* instr, int start) {
+    //build variable table for this function
+    build_var_table(cg, start);
 
+    //store current func name
+    strncpy(cg->current_func, instr->result, TAC_NAME_MAX);
+
+    //emit .global and label
+    fprintf(cg->out, ".global %s\n", instr->result);
+    fprintf(cg->out, "%s:\n", instr->result);
+
+    //emit prologue
+    fprintf(cg->out, "\tstp x29, x30, [sp, #-%d]!\n", cg->frame_size);
+    fprintf(cg->out, "\tmov x29, sp\n");
+
+    //spill parameters
+    int i = start + 1; //skip func begin
+    int reg = 0; //register
+    TACInstr param_instr = cg->tac->instructions[i]; 
+    while(param_instr.kind == TAC_PARAM_DECL) {
+        int offset = find_var(cg, param_instr.result);
+        fprintf(cg->out, "\tstr w%d, [sp, #%d]\n", reg, offset);
+
+        reg++;
+        param_instr = cg->tac->instructions[++i];
+    }
+
+    //
 }
 void emit_func_end(CodeGen* cg, TACInstr* instr, int end) {
-
+    fprintf(cg->out, "%s_end:\n", instr->result);
+    fprintf(cg->out, "\tldp x29, x30, [sp], #%d\n", cg->frame_size);
+    fprintf(cg->out, "\tret\n\n");
 }
 
 void emit_binop(CodeGen* cg, TACInstr* instr, const char* kind) {
@@ -221,7 +287,7 @@ void codegen_run(CodeGen* cg, const char* output_filename) {
             case TAC_GTE :
             case TAC_EQEQ :
             case TAC_NEQ :
-            case TAC_AND :
+            case TAC_AND : //TODO: give AND and OR their own emit function
             case TAC_OR :
                 emit_compare(cg, instr);
                 break;

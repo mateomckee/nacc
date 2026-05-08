@@ -98,6 +98,16 @@ char* tac_node(TACGen* tac, ASTNode* node) {
             //start marker
             emit(tac, TAC_FUNC_BEGIN, name, NULL, NULL);
 
+            //walk param list and emit TAC_PARAM_DECL to make codegen easier
+            ASTNode* param_node = node->left;
+            while(param_node != NULL) {
+                char* param_name = nacc_malloc(TAC_NAME_MAX);
+                snprintf(param_name, TAC_NAME_MAX, "%.*s", param_node->token.length, param_node->token.start);
+
+                emit(tac, TAC_PARAM_DECL, param_name, NULL, NULL);
+                param_node = param_node->next;
+            }
+
             tac_node(tac, node->right); //walk body
 
             //end marker 
@@ -428,6 +438,9 @@ void print_tac(TACGen* tac) {
                 break;
             case TAC_RETURN:
                 printf("    return %s\n", in->op1);
+                break;
+            case TAC_PARAM_DECL:
+                printf("    param decl %s\n", in->result);
                 break;
             case TAC_ARG:
                 printf("    arg %s\n", in->result);

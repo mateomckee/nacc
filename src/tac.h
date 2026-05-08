@@ -34,6 +34,7 @@ typedef enum {
     TAC_FUNC_BEGIN,
     TAC_FUNC_END,
 
+    TAC_PARAM_DECL,
     TAC_ARG, //push arg1 as next argument
     TAC_CALL,
     TAC_RETURN,
@@ -68,3 +69,4 @@ typedef struct {
 void tac_init(TACGen* tac);
 char* tac_node(TACGen* rac, ASTNode* node);
 void print_tac(TACGen* tac);
+const char* tac_kind_str(TACKind kind);
