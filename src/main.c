@@ -90,6 +90,8 @@ int main(int argc, char* argv[]) {
     //scan and parse source program, O(n)
     ASTNode* root = parse_program(&parser);
 
+    //print_ast(root, 0);
+
     //step 2
     //perform semantic analysis on AST, validate and annotate
     collect_functions(&sema, root); //1st pass, collect and store program function signatures

@@ -1,6 +1,11 @@
 #include "tac.h"
 #include <stdio.h>
 
+#define WORD_SIZE 4   // 32-bit int/char
+#define PTR_SIZE  8   // 64-bit pointer
+
+#define FUNC_MAX_VARS 256
+
 /*
  * codegen will use VarTables to keep track of all unique variables in each function, as a pre-pass process
  *
