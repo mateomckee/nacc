@@ -5,6 +5,7 @@
 typedef enum {
     TAC_NONE, //sentinel value
     TAC_ASSIGN,
+    TAC_ASSIGN_DEREF,
 
     //arithmetic operators
     TAC_ADD,
@@ -34,6 +35,7 @@ typedef enum {
     TAC_FUNC_BEGIN,
     TAC_FUNC_END,
 
+    TAC_PARAM_DECL,
     TAC_ARG, //push arg1 as next argument
     TAC_CALL,
     TAC_RETURN,
@@ -56,8 +58,8 @@ typedef struct {
     //instructions are stored as a dynamic array
     TACInstr* instructions;
     //number of instructions
-    unsigned int count;
-    unsigned int capacity; //alocated size
+    int count;
+    int capacity; //alocated size
 
     //keep track of temporary/label numbers (t0, t1, l0 l1, etc.)
     int temp_count;
@@ -68,3 +70,4 @@ typedef struct {
 void tac_init(TACGen* tac);
 char* tac_node(TACGen* rac, ASTNode* node);
 void print_tac(TACGen* tac);
+const char* tac_kind_str(TACKind kind);
