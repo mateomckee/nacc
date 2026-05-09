@@ -53,6 +53,8 @@ gcc prog.s -o prog  #assemble + link
 
 ---
 
-## note on AI
+## resources & AI use
 
-All code was written by me. I used Claude as a design/brainstorming tool, such as for design decisions and concept explanations.
+**Textbook:** Cooper, Keith D., and Linda Torczon. *Engineering a Compiler*. 3rd ed., Morgan Kaufmann, 2022. Used throughout my CS4713 Compiler Construction course at UTSA and as a reference in this project for lexer/parser/IR design.
+
+**AI:** All code was written by me. I used Claude strictly as a design/brainstorming tool for design decisions and concept explanations.
