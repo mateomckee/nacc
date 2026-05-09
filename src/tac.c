@@ -301,9 +301,18 @@ char* tac_node(TACGen* tac, ASTNode* node) {
             return old;
         }
         case NODE_ASSIGN : {
-            //assign to: name
+            TACKind tac_kind = TAC_ASSIGN;
+
             char* name = nacc_malloc(TAC_NAME_MAX);
-            snprintf(name, TAC_NAME_MAX, "%.*s", node->left->token.length, node->left->token.start);
+            //assign operation is dealing with a dereference
+            //set name to either the dereferened ptr (name of var ptr is pointing to), or just var name if regular assign
+            if(node->left->kind == NODE_UNOP && node->left->token.kind == TOK_STAR) {
+                tac_kind = TAC_ASSIGN_DEREF;
+
+                //name should be the pointer variable, not the * token
+                snprintf(name, TAC_NAME_MAX, "%.*s", node->left->left->token.length, node->left->left->token.start);
+            }
+            else { snprintf(name, TAC_NAME_MAX, "%.*s", node->left->token.length, node->left->token.start); }
 
             //assign from: right
             char* right = tac_node(tac, node->right);
@@ -325,22 +334,31 @@ char* tac_node(TACGen* tac, ASTNode* node) {
             }
             
             //emit final assignment instruction
-            emit(tac, TAC_ASSIGN, name, right, NULL);
+            emit(tac, tac_kind, name, right, NULL);
             return name;
         }
         case NODE_CALL : {
             char* func_name = nacc_malloc(TAC_NAME_MAX);
             snprintf(func_name, TAC_NAME_MAX, "%.*s", node->token.length, node->token.start);
 
+            char temp_args[MAX_PARAMS][TAC_NAME_MAX];
+
             int argc = 0;
             //emit TAC_ARG for each arg
             ASTNode* arg = node->left;
             while(arg != NULL) {
                 char* arg_name = tac_node(tac, arg);
-                emit(tac, TAC_ARG, arg_name, NULL, NULL);
+                strncpy(temp_args[argc], arg_name, TAC_NAME_MAX); //copy to temp array
                 arg = arg->next;
                 argc++;
             }
+
+            //emit TAC after walking all args to generate all their values first
+            //this fixes functions being called inbetween args, which messes up codegen return values
+            for(int i = 0; i < argc; i++) {
+                emit(tac, TAC_ARG, temp_args[i], NULL, NULL);
+            }
+
 
             //convert argc to string
             char argc_str[TAC_NAME_MAX];
@@ -380,6 +398,7 @@ char* tac_node(TACGen* tac, ASTNode* node) {
 const char* tac_kind_str(TACKind kind) {
     switch(kind) {
         case TAC_ASSIGN:      return "ASSIGN";
+        case TAC_ASSIGN_DEREF:return "ASSIGN_DEREF";
         case TAC_ADD:         return "ADD";
         case TAC_SUB:         return "SUB";
         case TAC_MUL:         return "MUL";
@@ -411,7 +430,7 @@ const char* tac_kind_str(TACKind kind) {
 }
 
 void print_tac(TACGen* tac) {
-    unsigned int i;
+    int i;
     for(i = 0; i < tac->count; i++) {
         TACInstr* in = &tac->instructions[i];
         switch(in->kind) {
@@ -434,6 +453,9 @@ void print_tac(TACGen* tac) {
                 printf("    if %s goto %s\n", in->op1, in->result);
                 break;
             case TAC_ASSIGN:
+                printf("    %s = %s\n", in->result, in->op1);
+                break;
+            case TAC_ASSIGN_DEREF:
                 printf("    %s = %s\n", in->result, in->op1);
                 break;
             case TAC_RETURN:

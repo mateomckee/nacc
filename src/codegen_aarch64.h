@@ -1,7 +1,11 @@
 #include "tac.h"
 #include <stdio.h>
 
-#define WORD_SIZE 4   // 32-bit int/char
+//8 byte word size
+//known limitation: int/chars only need 4 bytes, pointers need 8 bytes, so for MVP, just make everything use 8 bytes, wasting 4 extra bytes on the int/chars
+//TODO: add type kind to var entry to know how many bytes to allocate to a given variable
+#define WORD_SIZE 8
+
 #define PTR_SIZE  8   // 64-bit pointer
 
 #define FUNC_MAX_VARS 256

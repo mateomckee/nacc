@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include "util.h"
 
+int find_var(CodeGen* cg, char* name);
+
 //round up to nearest 16 (required by AArch64)
 int align16(int size) {
     return (size + 15) & ~15;
@@ -13,16 +15,24 @@ int align16(int size) {
 void load_operand(CodeGen* cg, char* operand, int reg) {
     if (operand == NULL || *operand == '\0') return;
 
+    //check if its a string
+    if (strncmp(operand, "str", 3) == 0) {
+        //string literal, load address using adrp/add
+        fprintf(cg->out, "\tadrp x0, %s\n", operand);
+        fprintf(cg->out, "\tadd x0, x0, :lo12:%s\n", operand);
+        return;
+    }
+
     //check if it's a number (immediate)
     char* endptr;
     strtol(operand, &endptr, 10);
     if (*endptr == '\0') {
         //immediate value
-        fprintf(cg->out, "\tmov w%d, #%s\n", reg, operand);
+        fprintf(cg->out, "\tmov x%d, #%s\n", reg, operand);
     } else {
         //variable, load from stack
         int offset = find_var(cg, operand);
-        fprintf(cg->out, "\tldr w%d, [sp, #%d]\n", reg, offset);
+        fprintf(cg->out, "\tldr x%d, [sp, #%d]\n", reg, offset);
     }
 }
 
@@ -30,7 +40,7 @@ void load_operand(CodeGen* cg, char* operand, int reg) {
 void store_result(CodeGen* cg, char* result, int reg) {
     if (result == NULL || *result == '\0') return;
     int offset = find_var(cg, result);
-    fprintf(cg->out, "\tstr w%d, [sp, #%d]\n", reg, offset);
+    fprintf(cg->out, "\tstr x%d, [sp, #%d]\n", reg, offset);
 }
 
 //
@@ -99,7 +109,7 @@ int add_var(CodeGen* cg, char* name) {
     VarEntry new_var;
     strncpy(new_var.name, name, TAC_NAME_MAX); //set name
 
-    new_var.offset = cg->var_count * WORD_SIZE;
+    new_var.offset = cg->var_count * WORD_SIZE + 16; //plus 16 to not overwrite x29 and x30 (8 bytes each)
 
     cg->vars[cg->var_count] = new_var; //assign
     cg->var_count++;
@@ -157,22 +167,39 @@ void build_var_table(CodeGen* cg, int start) {
     cg->frame_size = align16(cg->var_count * WORD_SIZE + 16);
 }
 
-//emit helper functions
-void load_var(CodeGen* cg, char* name, char* reg) {
-    
-}
-void store_var(CodeGen* cg, char* name, char* reg) {
-    
-}
-
 //emit functions
+//1. load operands
+//2. emit operation
+//3. store result
 
 void emit_assign(CodeGen* cg, TACInstr* instr) {
+    load_operand(cg, instr->op1, 0);
+    store_result(cg, instr->result, 0);
+}
 
+//instr->result = pointer variable name
+//instr->op1 = value to store through pointer
+void emit_assign_deref(CodeGen* cg, TACInstr* instr) {
+    int ptr_offset = find_var(cg, instr->result);
+    fprintf(cg->out, "\tldr x0, [sp, #%d]\n", ptr_offset);  
+    load_operand(cg, instr->op1, 1);
+    fprintf(cg->out, "\tstr x1, [x0]\n");
 }
 
 void emit_global(CodeGen* cg, TACInstr* instr) {
-
+    //section, rodata, and data can be emitted multiple times
+    //string
+    if(strncmp(instr->result, "str", 3) == 0) {
+        fprintf(cg->out, ".section .rodata\n");
+        fprintf(cg->out, "%s:\n", instr->result);           //str01:
+        fprintf(cg->out, "\t.string \"%s\"\n", instr->op1); //  .string "hi"
+    }
+    //global variable
+    else {
+        fprintf(cg->out, ".section .data\n");
+        fprintf(cg->out, "%s:\n", instr->result);
+        fprintf(cg->out, "\t.word %s\n", instr->op1);
+    }
 }
 void emit_func_begin(CodeGen* cg, TACInstr* instr, int start) {
     //build variable table for this function
@@ -195,46 +222,114 @@ void emit_func_begin(CodeGen* cg, TACInstr* instr, int start) {
     TACInstr param_instr = cg->tac->instructions[i]; 
     while(param_instr.kind == TAC_PARAM_DECL) {
         int offset = find_var(cg, param_instr.result);
-        fprintf(cg->out, "\tstr w%d, [sp, #%d]\n", reg, offset);
+        fprintf(cg->out, "\tstr x%d, [sp, #%d]\n", reg, offset);
 
         reg++;
         param_instr = cg->tac->instructions[++i];
     }
-
-    //
 }
-void emit_func_end(CodeGen* cg, TACInstr* instr, int end) {
+void emit_func_end(CodeGen* cg, TACInstr* instr) {
     fprintf(cg->out, "%s_end:\n", instr->result);
     fprintf(cg->out, "\tldp x29, x30, [sp], #%d\n", cg->frame_size);
     fprintf(cg->out, "\tret\n\n");
 }
 
 void emit_binop(CodeGen* cg, TACInstr* instr, const char* kind) {
-
+    load_operand(cg, instr->op1, 0);
+    load_operand(cg, instr->op2, 1);
+    fprintf(cg->out, "\t%s x0, x0, x1\n", kind);
+    store_result(cg, instr->result, 0);
 }
 void emit_sdiv(CodeGen* cg, TACInstr* instr) {
-
+    load_operand(cg, instr->op1, 0);
+    load_operand(cg, instr->op2, 1);
+    fprintf(cg->out, "\tsdiv x0, x0, x1\n");
+    store_result(cg, instr->result, 0);
 }
 
 void emit_label(CodeGen* cg, TACInstr* instr) {
-
+    fprintf(cg->out, "%s_%s:\n", cg->current_func, instr->result);
 }
 void emit_jump(CodeGen* cg, TACInstr* instr) {
-
+    fprintf(cg->out, "\tb %s_%s\n", cg->current_func, instr->result);
 }
 void emit_jump_false(CodeGen* cg, TACInstr* instr) {
-
+    load_operand(cg, instr->op1, 0);
+    fprintf(cg->out, "\tcbz x0, %s_%s\n", cg->current_func, instr->result);
 }
 
 void emit_call(CodeGen* cg, TACInstr* instr, char arg_buf[][TAC_NAME_MAX], int arg_count) {
-
+    int i;
+    for(i = 0; i < arg_count; i++) { load_operand(cg, arg_buf[i], i); }
+    
+    fprintf(cg->out, "\tbl %s\n", instr->op1);
+    store_result(cg, instr->result, 0);
 }
 void emit_return(CodeGen* cg, TACInstr* instr) {
+    //store return value in w0 if any
+    if(instr->op1[0] != '\0') { load_operand(cg, instr->op1, 0); }
+    fprintf(cg->out, "\tb %s_end\n", cg->current_func);
+}
 
+void emit_logical(CodeGen* cg, TACInstr* instr, char* kind) {
+    load_operand(cg, instr->op1, 0);
+    load_operand(cg, instr->op2, 1);
+    fprintf(cg->out, "\tcmp x0, #0\n");
+    fprintf(cg->out, "\tcset x0, ne\n"); //w0 = (a != 0)
+    fprintf(cg->out, "\tcmp x1, #0\n");
+    fprintf(cg->out, "\tcset x1, ne\n"); //w1 = (b != 0)
+    fprintf(cg->out, "\t%s x0, x0, x1\n", kind);
+    store_result(cg, instr->result, 0);
 }
 
 void emit_compare(CodeGen* cg, TACInstr* instr) {
+    char* cond = "";
+    switch(instr->kind) {
+        case TAC_LT : cond = "lt"; break;
+        case TAC_GT : cond = "gt"; break;
+        case TAC_LTE : cond = "le"; break;
+        case TAC_GTE : cond = "ge"; break;
+        case TAC_EQEQ : cond = "eq"; break;
+        case TAC_NEQ : cond = "ne"; break;
+        default:
+            error(-1, "codegen: invalid compare kind");
+            break;
+    }
 
+    load_operand(cg, instr->op1, 0);
+    load_operand(cg, instr->op2, 1);
+    fprintf(cg->out, "\tcmp x0, x1\n");
+    fprintf(cg->out, "\tcset x0, %s\n", cond);
+    store_result(cg, instr->result, 0);
+}
+
+void emit_neg(CodeGen* cg, TACInstr* instr) {
+    load_operand(cg, instr->op1, 0);
+    fprintf(cg->out, "\tneg x0, x0\n");
+    store_result(cg, instr->result, 0);
+}
+
+void emit_not(CodeGen* cg, TACInstr* instr) {
+    load_operand(cg, instr->op1, 0);
+    fprintf(cg->out, "\tcmp x0, #0\n");
+    fprintf(cg->out, "\tcset x0, eq\n");
+    store_result(cg, instr->result, 0);
+}
+
+//pointers require 8 bytes to store, use x instead of w
+void emit_addr(CodeGen* cg, TACInstr* instr) {
+    int offset = find_var(cg, instr->op1);
+    fprintf(cg->out, "\tadd x0, sp, #%d\n", offset);
+    int result_offset = find_var(cg, instr->result);
+    fprintf(cg->out, "\tstr x0, [sp, #%d]\n", result_offset);
+}
+
+void emit_deref(CodeGen* cg, TACInstr* instr) {
+    int offset = find_var(cg, instr->op1);
+    fprintf(cg->out, "\tldr x0, [sp, #%d]\n", offset);
+    fprintf(cg->out, "\tldr x0, [x0]\n");
+    int result_offset = find_var(cg, instr->result);
+    fprintf(cg->out, "\tstr x0, [sp, #%d]\n", result_offset);
 }
 
 //main codegen loop
@@ -260,11 +355,11 @@ void codegen_run(CodeGen* cg, const char* output_filename) {
     //second pass: emit code
     for(i = 0; i < instr_count; i++) {
         TACInstr* instr = &cg->tac->instructions[i];
-        
         switch(instr->kind) {
             case TAC_FUNC_BEGIN : emit_func_begin(cg, instr, i); break;
-            case TAC_FUNC_END: emit_func_end(cg, instr, i); break;
+            case TAC_FUNC_END: emit_func_end(cg, instr); break;
             case TAC_ASSIGN : emit_assign(cg, instr); break;
+            case TAC_ASSIGN_DEREF : emit_assign_deref(cg, instr); break;
             case TAC_ADD : emit_binop(cg, instr, "add"); break;
             case TAC_SUB : emit_binop(cg, instr, "sub"); break;
             case TAC_MUL : emit_binop(cg, instr, "mul"); break;
@@ -287,15 +382,18 @@ void codegen_run(CodeGen* cg, const char* output_filename) {
             case TAC_GTE :
             case TAC_EQEQ :
             case TAC_NEQ :
-            case TAC_AND : //TODO: give AND and OR their own emit function
-            case TAC_OR :
                 emit_compare(cg, instr);
                 break;
-            //later
-            case TAC_NEG: break;
-            case TAC_NOT: break;
-            case TAC_DEREF : break;
-            case TAC_ADDR : break;
+            case TAC_AND :
+                emit_logical(cg, instr, "and");
+                break;
+            case TAC_OR :
+                emit_logical(cg, instr, "orr");
+                break;
+            case TAC_NEG : emit_neg(cg, instr); break;
+            case TAC_NOT : emit_not(cg, instr); break;
+            case TAC_DEREF : emit_deref(cg, instr); break;
+            case TAC_ADDR : emit_addr(cg, instr); break;
 
             case TAC_GLOBAL: break; //already passed
 

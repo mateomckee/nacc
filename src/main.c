@@ -4,7 +4,7 @@
 #include "codegen_aarch64.h"
 
 //simple function to take file contents and return them as a string
-const char* get_file_as_string(const char* filepath) {
+char* get_file_as_string(char* filepath) {
     FILE* f = fopen(filepath, "r");
 
     if (!f) {
@@ -24,7 +24,7 @@ const char* get_file_as_string(const char* filepath) {
     return output;
 }
 
-const char* get_output_filename(const char* input_filepath) {
+char* get_output_filename(char* input_filepath) {
     //basename
     char* basename;
     //string split token
@@ -39,13 +39,13 @@ const char* get_output_filename(const char* input_filepath) {
     //grab first split, filename before extension
     char* name = strtok(basename, ".");
 
-    const char* output_filename = strcat(name, ".s");
+    char* output_filename = strcat(name, ".s");
 
     return output_filename;
 }
 
 
-void print_file(const char* filename) {
+void print_file(char* filename) {
     FILE* out = fopen(filename, "r");
 
     char ch;
@@ -65,10 +65,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    const char* input_filepath = argv[1];
+    char* input_filepath = argv[1];
 
-    const char* char_stream = get_file_as_string(input_filepath);
-    const char* output_filename = get_output_filename(input_filepath);
+    char* char_stream = get_file_as_string(input_filepath);
+    char* output_filename = get_output_filename(input_filepath);
 
     //init
     Lexer lexer;
@@ -101,13 +101,13 @@ int main(int argc, char* argv[]) {
     //produce TAC intermediate representation of code from annotated AST, architecture-independent
     tac_node(&tac, root);    
 
-    print_tac(&tac);
+    //print_tac(&tac);
 
     //step 4
     //walk linear TAC code and print AArch64 assembly into output file. codegen_run encompasses file lifetime
     codegen_run(&cg, output_filename);    
 
-    print_file(output_filename);
+    //print_file(output_filename);
 
     free(char_stream);
 

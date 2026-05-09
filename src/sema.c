@@ -275,8 +275,8 @@ void sema_node(Sema* sema, ASTNode* node) {
             //walk initialization if any, to annotate its type
             sema_node(sema, node->left);
 
-            //check type compatability between declaration and initialization
-            if(!types_compatible(node->type, node->left->type)) {
+            //if theres an initialization, check type compatability between declaration and initialization
+            if(node->left != NULL && !types_compatible(node->type, node->left->type)) {
                 error(node->token.line, "incompatible types in assignment");
             }
 
