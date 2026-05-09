@@ -24,13 +24,13 @@ prog.c -> lexer -> parser -> sema -> tac -> codegen_aarch64 -> prog.s -> gcc -> 
 
 ## what it supports
 
-- types: `int`, `char`, `int*`, `char*`, `void`
+- types: `int`, `char`, `int*`, `char*`, `void`, `void*`
 - control flow: `if/else`, `while`, `for`
 - functions: declaration, definition, recursion
 - operators: arithmetic, comparison, logical, `++`/`--`, `+=` `-=` `*=` `/=`
 - pointers: `&`, `*`, dereference assignment
 - I/O: `printf`/`scanf` via libc
-- global variables
+- global/local variables
 
 ## what it doesn't support (yet)
 
@@ -46,8 +46,8 @@ prog.c -> lexer -> parser -> sema -> tac -> codegen_aarch64 -> prog.s -> gcc -> 
 
 ```bash
 make
-./nacc input.c        # emits output.s
-gcc output.s -o prog  # assemble + link
+./nacc prog.c        #outputs prog.s
+gcc prog.s -o prog  #assemble + link
 ./prog
 ```
 
