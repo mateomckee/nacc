@@ -2,6 +2,7 @@
 #include "sema.h"
 #include <string.h>
 #include "util.h"
+#include <stdlib.h>
 
 /*
  * Semantic analysis
@@ -12,6 +13,10 @@ int types_compatible(TypeKind a, TypeKind b) {
     if (a == b) return 1;
     //char and int are compatible
     if ((a == TYPE_INT && b == TYPE_CHAR) || (a == TYPE_CHAR && b == TYPE_INT)) return 1;
+    //int[] and int* are compatible
+    if ((a == TYPE_INT_ARRAY && b == TYPE_INT_PTR) || (a == TYPE_INT_PTR && b == TYPE_INT_ARRAY)) return 1;
+    //char[] and char* are compatible
+    if ((a == TYPE_CHAR_ARRAY && b == TYPE_CHAR_PTR) || (a == TYPE_CHAR_PTR && b == TYPE_CHAR_ARRAY)) return 1;
     return 0;
 }
 
@@ -275,8 +280,18 @@ void sema_node(Sema* sema, ASTNode* node) {
             //walk initialization if any, to annotate its type
             sema_node(sema, node->left);
 
-            //if theres an initialization, check type compatability between declaration and initialization
-            if(node->left != NULL && !types_compatible(node->type, node->left->type)) {
+            //if were declaring an array with a size node in extra
+            if(node->extra != NULL) {
+                int size = (int)strtol(node->extra->token.start, NULL, 10);
+                if (size <= 0) {
+                    error(node->token.line, "array size must be greater than zero");
+                }
+                if(size > MAX_ARRAY_SIZE) {
+                    error(node->token.line, "array exceeded maximum size: %d", MAX_ARRAY_SIZE);
+                }
+            }
+            //if theres an initialization (and no array), check type compatability between declaration and initialization
+            else if(node->left != NULL && !types_compatible(node->type, node->left->type)) {
                 error(node->token.line, "incompatible types in assignment");
             }
 
@@ -428,6 +443,20 @@ void sema_node(Sema* sema, ASTNode* node) {
             //annotate node with node type
             node->type = symbol->type;
 
+            break;
+        }
+        case NODE_INDEX : {
+            sema_node(sema, node->left);
+            sema_node(sema, node->right);
+
+            Symbol* symbol = lookup_symbol(sema, node->left->token.start, node->left->token.length);
+            if(symbol == NULL) {
+                error(node->left->token.line, "undeclared array '%.*s'", node->left->token.length, node->left->token.start);
+            }
+            
+            //set array indexing type to int/char based on what type of array we're indexing
+            node->type = (symbol->type == TYPE_INT_ARRAY || symbol->type == TYPE_INT_PTR) ? TYPE_INT : TYPE_CHAR;
+            
             break;
         }
         case NODE_POSTFIX :

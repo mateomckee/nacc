@@ -25,6 +25,7 @@ prog.c -> lexer -> parser -> sema -> tac -> codegen_aarch64 -> prog.s -> gcc -> 
 ## what it supports
 
 - types: `int`, `char`, `int*`, `char*`, `void`, `void*`
+- arrays: `int[]`, `char[]`
 - control flow: `if/else`, `while`, `for`
 - functions: declaration, definition, recursion
 - operators: arithmetic, comparison, logical, `++`/`--`, `+=` `-=` `*=` `/=`
@@ -32,13 +33,20 @@ prog.c -> lexer -> parser -> sema -> tac -> codegen_aarch64 -> prog.s -> gcc -> 
 - I/O: `printf`/`scanf` via libc
 - global/local variables
 
-## what it doesn't support (yet)
+## what it doesn't support
 
 - structs, enums, unions
-- arrays
+- multi-dimensional arrays
 - `switch`, `do-while`
 - preprocessor (`#include`, `#define`)
 - floats
+
+## known limitations
+- **no optimization:** code generation is done through naive stack spilling, no register allocation or liveness analysis (I want to work on this soon as a new project)
+- **no array bounds checking:** out of bounds access is undefined behavior
+- **single file only:** no multi-file compilation or linking
+- **first error only:** compilation stops at the first error encountered
+- **AArch64 Linux only:** output targets Linux ELF AArch64
 
 ---
 

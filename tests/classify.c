@@ -16,3 +16,4 @@ int main() {
     printf("%d\n", classify(0));
     return 0;
 }
+
