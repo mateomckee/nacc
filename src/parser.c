@@ -168,8 +168,8 @@ ASTNode* parse_primary(Parser* parser) {
             return expr;
         }
         case TOK_ID : {
-            // ID( is a function call
             ASTNode* ident = make_node(NODE_IDENT, token);
+            // ID( is a function call
             if(check(parser, TOK_LPAREN)) {
                 advance(parser); //consume '('
                 ASTNode* args = parse_args(parser);
@@ -178,7 +178,17 @@ ASTNode* parse_primary(Parser* parser) {
                 call->left = args;
                 return call;
             }
-            //postfix
+            // ID[ is array indexing
+            else if(check(parser, TOK_LBRACKET)) {
+                advance(parser); //comsume '['
+                ASTNode* index = parse_expr(parser);
+                expect(parser, TOK_RBRACKET, "expected \']\' after array index");
+                ASTNode* array = make_node(NODE_INDEX, token);
+                array->left = ident;
+                array->right = index;
+                return array;
+            }
+            // ID++ is postfix
             else if(check(parser, TOK_PLUSPLUS) || check(parser, TOK_MINUSMINUS)) {
                 advance(parser);
                 Token operator = parser->previous_token;
@@ -189,7 +199,8 @@ ASTNode* parse_primary(Parser* parser) {
             return ident;
         }
         default :
-            printf("parse_primary default: kind=%s\n", token_kind_str(kind));
+            if(kind == TOK_RBRACKET) { error(token.line, "expected array index"); }
+
             error(token.line, "expected expression");
             return NULL;
     }
@@ -325,24 +336,32 @@ ASTNode* parse_expr_stmt(Parser* parser) {
 
 ASTNode* parse_decl(Parser* parser) {
     TypeKind type = consume_type(parser);
-
     Token token = expect(parser, TOK_ID, "expected variable name");
 
     if(type == TYPE_VOID) { error(token.line, "cannot have a variable of type void"); }
 
-    ASTNode* left = NULL;
-    //if this declaration is also initializing
-    if(match(parser, TOK_EQUAL)) {
-        left = parse_expr(parser);
-    }
-    
-    expect(parser, TOK_SEMICOLON, "expected \';\' after declaration");
-
     ASTNode* node = make_node(NODE_DECL, token);
     node->type = type;
     node->token = token;
-    node->left = left;
 
+    //check for array declaration
+    if(match(parser, TOK_LBRACKET)) {
+        expect(parser, TOK_INT_LIT, "expected an int literal for array size");
+
+        //array size must be an int literal, no dynamic arrays in my scope
+        node->extra = make_node(NODE_INT_LIT, parser->previous_token);
+
+        //set as INT/CHAR array type. only 2 types of arrays in my scope
+        node->type = (type == TYPE_INT) ? TYPE_INT_ARRAY : TYPE_CHAR_ARRAY;
+
+        expect(parser, TOK_RBRACKET, "expected \']\' after array size");
+    }
+    //check for initialization
+    else if(match(parser, TOK_EQUAL)) {
+        node->left = parse_expr(parser);
+    }
+    
+    expect(parser, TOK_SEMICOLON, "expected \';\' after declaration");
     return node;
 }
 
@@ -643,6 +662,7 @@ const char* node_kind_str(NodeKind kind) {
         case NODE_INT_LIT:    return "NODE_INT_LIT";
         case NODE_CHAR_LIT:   return "NODE_CHAR_LIT";
         case NODE_STRING_LIT: return "NODE_STRING_LIT";
+        case NODE_INDEX:      return "NODE_INDEX";
         default:              return "UNKNOWN";
     }
 }
@@ -656,6 +676,8 @@ const char* type_kind_str(TypeKind kind) {
         case TYPE_INT_PTR:  return "int*";
         case TYPE_CHAR_PTR: return "char*";
         case TYPE_VOID_PTR: return "void*";
+        case TYPE_INT_ARRAY:return "int[]";
+        case TYPE_CHAR_ARRAY:return "char[]";
         default:            return "unknown";
     }
 }

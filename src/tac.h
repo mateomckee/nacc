@@ -2,6 +2,15 @@
 #define TAC_CAPACITY 1024
 #define TAC_NAME_MAX 64
 
+#define MAX_TEMPS 512
+
+//moved to TAC for array indexing, will refactor later
+//8 byte word size
+//known limitation: int/chars only need 4 bytes, pointers need 8 bytes, so for MVP, just make everything use 8 bytes, wasting 4 extra bytes on the int/chars
+//TODO: add type kind to var entry to know how many bytes to allocate to a given variable
+#define WORD_SIZE 8
+#define PTR_SIZE  8   // 64-bit pointer
+
 typedef enum {
     TAC_NONE, //sentinel value
     TAC_ASSIGN,
@@ -34,6 +43,8 @@ typedef enum {
     TAC_JUMP_FALSE, //jump if not
     TAC_FUNC_BEGIN,
     TAC_FUNC_END,
+
+    TAC_ARRAY_DECL,
 
     TAC_PARAM_DECL,
     TAC_ARG, //push arg1 as next argument

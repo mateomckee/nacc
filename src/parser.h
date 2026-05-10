@@ -4,12 +4,12 @@
 // NODE_IF:     left=cond    right=then   extra1=else
 // NODE_WHILE:  left=cond    right=body
 // NODE_FOR:    left=init    right=body   extra1=cond  extra2=post
-// NODE_DECL:   left=init    right=NULL
+// NODE_DECL:   left=init    right=NULL   extra1=size (arrays)
 // NODE_RETURN: left=expr    right=NULL
 // NODE_BINOP:  left=left    right=right
 // NODE_UNOP:   left=operand
 // NODE_CALL:   left=args
-
+// NODE_INDEX:  left=identifier,  right=expression
 
 typedef struct {
     Lexer* lexer;
@@ -34,6 +34,8 @@ typedef enum {
     NODE_IDENT,
     NODE_POSTFIX,
 
+    NODE_INDEX, //array indexing
+
     NODE_INT_LIT,
     NODE_CHAR_LIT,
     NODE_STRING_LIT
@@ -46,7 +48,9 @@ typedef enum {
     TYPE_VOID,
     TYPE_INT_PTR,
     TYPE_CHAR_PTR,
-    TYPE_VOID_PTR
+    TYPE_VOID_PTR,
+    TYPE_INT_ARRAY,
+    TYPE_CHAR_ARRAY
 } TypeKind;
 
 //tree structure

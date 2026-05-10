@@ -7,6 +7,8 @@
 #define MAX_FUNC 64
 #define MAX_PARAMS 8
 
+#define MAX_ARRAY_SIZE 1024
+
 typedef struct {
     const char* start;
     int length;

@@ -2,9 +2,13 @@
 #include "util.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 //temp and label helpers
 char* make_temp(TACGen* tac) {
+    if (tac->temp_count >= MAX_TEMPS) {
+        error(-1, "function too complex: exceeded maximum temporary limit of %d", MAX_TEMPS);
+    }
     char* temp = nacc_malloc(TAC_NAME_MAX);
     snprintf(temp, TAC_NAME_MAX, "t%d", tac->temp_count++);
     return temp;
@@ -47,6 +51,33 @@ void tac_init(TACGen* tac) {
     tac->temp_count = 0;
     tac->label_count = 0;
     tac->str_count = 0;
+}
+
+char* tac_index_addr(TACGen* tac, ASTNode* node) {
+    //node is NODE_INDEX: left=array ident, right=index expr
+    char* array_name = nacc_malloc(TAC_NAME_MAX);
+    snprintf(array_name, TAC_NAME_MAX, "%.*s", node->left->token.length, node->left->token.start);
+
+    //evaluate index
+    char* index = tac_node(tac, node->right);
+
+    //offset = index * WORD_SIZE
+    char* size_str = nacc_malloc(TAC_NAME_MAX);
+    snprintf(size_str, TAC_NAME_MAX, "%d", WORD_SIZE);
+    char* t_offset = make_temp(tac);
+    emit(tac, TAC_MUL, t_offset, index, size_str);
+
+    //base = &array
+    TACKind base_kind = TAC_ADDR;
+    if(node->left->type == TYPE_INT_PTR || node->left->type == TYPE_CHAR_PTR) base_kind = TAC_ASSIGN;
+    char* t_base = make_temp(tac);
+    emit(tac, base_kind, t_base, array_name, NULL);
+
+    //addr = base + offset
+    char* t_addr = make_temp(tac);
+    emit(tac, TAC_ADD, t_addr, t_base, t_offset);
+
+    return t_addr;
 }
 
 //same concept as previous step (semantic analysis), recursively walk the AST (DFS), performing certain TAC generation actions depending on the ASTNode kind
@@ -204,8 +235,16 @@ char* tac_node(TACGen* tac, ASTNode* node) {
         }
         case NODE_DECL : {
             //nothing to emit, variable just exists, codegen handles allocation in stack space
-            //only handle initialization
-            if (node->left != NULL) {
+            //only handle array declaration or initialization
+            if(node->type == TYPE_INT_ARRAY || node->type == TYPE_CHAR_ARRAY) {
+                char* name = nacc_malloc(TAC_NAME_MAX);
+                snprintf(name, TAC_NAME_MAX, "%.*s", node->token.length, node->token.start);
+
+                char* size = nacc_malloc(TAC_NAME_MAX);
+                snprintf(size, TAC_NAME_MAX, "%.*s", node->extra->token.length, node->extra->token.start);
+                emit(tac, TAC_ARRAY_DECL, name, size, NULL);
+            }
+            else if (node->left != NULL) {
                 char* left = tac_node(tac, node->left);
 
                 char* name = nacc_malloc(TAC_NAME_MAX);
@@ -253,7 +292,11 @@ char* tac_node(TACGen* tac, ASTNode* node) {
                 case TOK_PLUSPLUS: kind = TAC_ADD; right = "1"; break;
                 case TOK_MINUSMINUS: kind = TAC_SUB; right = "1"; break;
                 case TOK_STAR: kind = TAC_DEREF; break;
-                case TOK_AMPERSAND: kind = TAC_ADDR; break;
+                case TOK_AMPERSAND:
+                    //if getting address of array index, just return element address directly
+                    if(node->left->kind == NODE_INDEX) return tac_index_addr(tac, node->left);
+                    kind = TAC_ADDR;
+                    break;
                 case TOK_MINUS: kind = TAC_NEG ;break;
                 case TOK_NOT: kind = TAC_NOT; break;
                 default: kind = TAC_ADD; break;
@@ -302,16 +345,22 @@ char* tac_node(TACGen* tac, ASTNode* node) {
         }
         case NODE_ASSIGN : {
             TACKind tac_kind = TAC_ASSIGN;
-
             char* name = nacc_malloc(TAC_NAME_MAX);
-            //assign operation is dealing with a dereference
-            //set name to either the dereferened ptr (name of var ptr is pointing to), or just var name if regular assign
-            if(node->left->kind == NODE_UNOP && node->left->token.kind == TOK_STAR) {
-                tac_kind = TAC_ASSIGN_DEREF;
 
+            //a[i] = x
+            if (node->left->kind == NODE_INDEX) {
+                tac_kind = TAC_ASSIGN_DEREF;
+                char* t_addr = tac_index_addr(tac, node->left);
+                //copy t_addr to name, gets emitted down the line
+                name = t_addr;
+            }
+            //*ptr = x
+            else if(node->left->kind == NODE_UNOP && node->left->token.kind == TOK_STAR) {
+                tac_kind = TAC_ASSIGN_DEREF;
                 //name should be the pointer variable, not the * token
                 snprintf(name, TAC_NAME_MAX, "%.*s", node->left->left->token.length, node->left->left->token.start);
             }
+            //var = x
             else { snprintf(name, TAC_NAME_MAX, "%.*s", node->left->token.length, node->left->token.start); }
 
             //assign from: right
@@ -328,9 +377,18 @@ char* tac_node(TACGen* tac, ASTNode* node) {
             }
             //if we have a compound assignment operator, first do the arithmetic
             if(kind != TAC_NONE) {
-                char* temp = make_temp(tac);
-                emit(tac, kind, temp, name, right);
-                right = temp; //set right to temp to assign temp to name
+                char* t_cur = make_temp(tac);
+                //if left side (assign to) is a *ptr or a[i], dereference it first to get its value before doing compound operation
+                if(tac_kind == TAC_ASSIGN_DEREF) {
+                    emit(tac, TAC_DEREF, t_cur, name, NULL); 
+                }
+                else {
+                    emit(tac, TAC_ASSIGN, t_cur, name, NULL);
+                }
+
+                char* t_new = make_temp(tac);
+                emit(tac, kind, t_new, t_cur, right);
+                right = t_new; //set right to t_new to assign t_new to name
             }
             
             //emit final assignment instruction
@@ -373,13 +431,28 @@ char* tac_node(TACGen* tac, ASTNode* node) {
             //return temp
             return temp;
         }
+        //lower a[i] down to *(a + i * size)
+        case NODE_INDEX : {
+            char* t_addr = tac_index_addr(tac, node);
+            char* t_val = make_temp(tac);
+            emit(tac, TAC_DEREF, t_val, t_addr, NULL);
+            return t_val;
+        }
         //only return operand strings
         case NODE_INT_LIT :
         case NODE_CHAR_LIT :
         case NODE_IDENT : {
-            char* result = nacc_malloc(TAC_NAME_MAX);
-            snprintf(result, TAC_NAME_MAX, "%.*s", node->token.length, node->token.start);
-            return result;
+            char* name = nacc_malloc(TAC_NAME_MAX);
+            snprintf(name, TAC_NAME_MAX, "%.*s", node->token.length, node->token.start);
+
+            //if ID is array, return its base address, not its name
+            if(node->type == TYPE_INT_ARRAY || node->type == TYPE_CHAR_ARRAY) {
+                char* t0 = make_temp(tac);
+                emit(tac, TAC_ADDR, t0, name, NULL);
+                return t0;
+            }
+
+            return name;
         }
         case NODE_STRING_LIT : {
             char* result = nacc_malloc(TAC_NAME_MAX);
@@ -460,6 +533,9 @@ void print_tac(TACGen* tac) {
                 break;
             case TAC_RETURN:
                 printf("    return %s\n", in->op1);
+                break;
+            case TAC_ARRAY_DECL:
+                printf("    array decl %s (size=%s)\n", in->result, in->op1);
                 break;
             case TAC_PARAM_DECL:
                 printf("    param decl %s\n", in->result);

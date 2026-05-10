@@ -25,6 +25,7 @@ prog.c -> lexer -> parser -> sema -> tac -> codegen_aarch64 -> prog.s -> gcc -> 
 ## what it supports
 
 - types: `int`, `char`, `int*`, `char*`, `void`, `void*`
+- arrays: int[], char[]
 - control flow: `if/else`, `while`, `for`
 - functions: declaration, definition, recursion
 - operators: arithmetic, comparison, logical, `++`/`--`, `+=` `-=` `*=` `/=`
@@ -35,7 +36,6 @@ prog.c -> lexer -> parser -> sema -> tac -> codegen_aarch64 -> prog.s -> gcc -> 
 ## what it doesn't support (yet)
 
 - structs, enums, unions
-- arrays
 - `switch`, `do-while`
 - preprocessor (`#include`, `#define`)
 - floats
