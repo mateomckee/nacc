@@ -1,6 +1,6 @@
 # nacc - not a c compiler
 
-A hand-written C subset compiler targeting AArch64 assembly, built from scratch in 3 months. Compiles a subset of C all the way down to a native binary on a Raspberry Pi 4B (or any AArch64 machine).
+A hand-written C subset compiler targeting AArch64 assembly, built from scratch in 3 months. Compiles a subset of C all the way down to native binary on a Linux AArch64 machine (e.g., a Raspberry Pi 4B).
 
 No AI code, compiler frameworks, or parser generators were used. I wrote every stage, every line, in pure C code. :)
 
@@ -41,7 +41,8 @@ prog.c -> lexer -> parser -> sema -> tac -> codegen_aarch64 -> prog.s -> gcc -> 
 - preprocessor (`#include`, `#define`)
 - floats
 
-## known limitations
+## known limitations (future improvements)
+
 - **no optimization:** code generation is done through naive stack spilling, no register allocation or liveness analysis (I want to work on this soon as a new project)
 - **no array bounds checking:** out of bounds access is undefined behavior
 - **single file only:** no multi-file compilation or linking
