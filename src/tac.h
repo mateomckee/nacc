@@ -4,12 +4,8 @@
 
 #define MAX_TEMPS 512
 
-//moved to TAC for array indexing, will refactor later
-//8 byte word size
-//known limitation: int/chars only need 4 bytes, pointers need 8 bytes, so for MVP, just make everything use 8 bytes, wasting 4 extra bytes on the int/chars
-//TODO: add type kind to var entry to know how many bytes to allocate to a given variable
-#define WORD_SIZE 8
-#define PTR_SIZE  8   // 64-bit pointer
+//pointers are 8 bytes (64-bit); int/char widths live in codegen
+#define PTR_SIZE 8
 
 typedef enum {
     TAC_NONE, //sentinel value
@@ -44,7 +40,8 @@ typedef enum {
     TAC_FUNC_BEGIN,
     TAC_FUNC_END,
 
-    TAC_ARRAY_DECL,
+    TAC_VAR_DECL,   //scalar local declaration (carries type)
+    TAC_ARRAY_DECL, //array local declaration (carries element-type-array, size in op1)
 
     TAC_PARAM_DECL,
     TAC_ARG, //push arg1 as next argument
@@ -59,10 +56,11 @@ typedef struct {
     //for current MVP, tac operands are stored as just plain strings, but in the future, refactoring to storing them as separate structs would be a better design
     //this is a known limitation, TODO in the future
     TACKind kind; //operator, or operation to perform on op1/op2
+    TypeKind type; //declared type for decl ops (VAR/PARAM/ARRAY/GLOBAL); TYPE_NONE otherwise
     char result[TAC_NAME_MAX]; //destination (temp name, label, variable name)
     char op1[TAC_NAME_MAX];
     char op2[TAC_NAME_MAX];
-    
+
 } TACInstr;
 
 typedef struct {

@@ -71,8 +71,6 @@ void push_scope(Sema* sema) {
     sema->depth++;
 }
 
-//AST walk actions
-
 Symbol* lookup_symbol_in_scope(Scope* scope, const char* start, int length) {
     int count = scope->count;
     int i;
