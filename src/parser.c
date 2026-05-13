@@ -510,22 +510,27 @@ ASTNode* parse_block(Parser* parser) {
     return node;
 }
 
+//same as parse_decl pretty much
 ASTNode* parse_global(Parser* parser, TypeKind type, Token token) {
     //pick up from where parse_program left off
-    
-    ASTNode* left = NULL;
-    //if also initializing
-    if(match(parser, TOK_EQUAL)) {
-        left = parse_expr(parser);
-    }
 
-    expect(parser, TOK_SEMICOLON, "expected \';\' after declaration");
-    
     ASTNode* node = make_node(NODE_DECL, token);
     node->token = token;
     node->type = type;
-    node->left = left;
 
+    //array global: type id[N];
+    if(match(parser, TOK_LBRACKET)) {
+        expect(parser, TOK_INT_LIT, "expected an int literal for array size");
+        node->extra = make_node(NODE_INT_LIT, parser->previous_token);
+        node->type = (type == TYPE_INT) ? TYPE_INT_ARRAY : TYPE_CHAR_ARRAY;
+        expect(parser, TOK_RBRACKET, "expected \']\' after array size");
+    }
+    //scalar global with optional initializer
+    else if(match(parser, TOK_EQUAL)) {
+        node->left = parse_expr(parser);
+    }
+
+    expect(parser, TOK_SEMICOLON, "expected \';\' after declaration");
     return node;
 }
 
@@ -613,8 +618,8 @@ ASTNode* parse_program(Parser* parser) {
                 f_tail = f_tail->next;
             }
         }
-        //global variable
-        else if(check(parser, TOK_SEMICOLON) || check(parser, TOK_EQUAL)) {
+        //global variable: var, var w init, or array
+        else if(check(parser, TOK_SEMICOLON) || check(parser, TOK_EQUAL) || check(parser, TOK_LBRACKET)) {
             if(type == TYPE_VOID) { error(token.line, "cannot have a variable of type void"); }
             ASTNode* global = parse_global(parser, type, token);
             if(g_head == NULL) {

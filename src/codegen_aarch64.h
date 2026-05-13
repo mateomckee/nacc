@@ -1,9 +1,7 @@
 #include "tac.h"
 #include <stdio.h>
 
-#define SP_OFFSET_MAX  504
-#define SP_OFFSET_MIN -512
-
+#define MAX_GLOBALS 128
 #define FUNC_MAX_VARS 256
 
 /*
@@ -11,12 +9,16 @@
  *
  */
 
-
+typedef struct {
+    char name[TAC_NAME_MAX];
+    TypeKind type;
+} GlobalEntry;
 
 typedef struct {
     char name[TAC_NAME_MAX];
-    int offset; //byte offset from stack pointer (sp)
-
+    int offset;     //byte offset from stack pointer (sp)
+    int size;       //total bytes occupied (size of one element * count)
+    TypeKind type;  //scalar type for scalars/pointers, element type for arrays (TYPE_INT/CHAR/*_PTR)
 } VarEntry;
 
 typedef struct {
@@ -25,8 +27,9 @@ typedef struct {
 
     VarEntry* vars; //var entries (current function)
     char current_func[TAC_NAME_MAX];
-    int var_count; //num of vars (current function)
-    int frame_size; //total stack frame size (current function)
+    int var_count;  //num of vars (current function)
+    int frame_used; //bytes consumed by var allocations (pre-16-alignment)
+    int frame_size; //total stack frame size, aligned to 16
 } CodeGen;
 
 void codegen_init(CodeGen* cg, TACGen* tac);
