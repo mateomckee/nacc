@@ -33,13 +33,14 @@ FuncSymbol make_func_symbol(const char* start, int length, TypeKind return_type)
     return func_symbol;
 }
 
-Symbol make_symbol(const char* start, int length, TypeKind type, int is_global) {
+Symbol make_symbol(const char* start, int length, TypeKind type, int is_global, int array_size) {
     Symbol symbol;
     symbol.start = start;
     symbol.length = length;
 
     symbol.type = type;
     symbol.is_global = is_global;
+    symbol.array_size = array_size;
 
     return symbol;
 }
@@ -224,7 +225,7 @@ void sema_node(Sema* sema, ASTNode* node) {
             //declare function parameters for the function scope
             ASTNode* node_param = node->left;
             while(node_param != NULL) {
-                declare_symbol(sema, make_symbol(node_param->token.start, node_param->token.length, node_param->type, 0));
+                declare_symbol(sema, make_symbol(node_param->token.start, node_param->token.length, node_param->type, 0, 1));
                 node_param = node_param->next;
             }
 
@@ -274,24 +275,27 @@ void sema_node(Sema* sema, ASTNode* node) {
             break;
         case NODE_DECL : {
             int is_global = sema->depth == 0 ? 1 : 0;
+
+            //if were declaring an array with a size node in extra
+            int array_size = 1;
+            if(node->extra != NULL) {
+                array_size = (int)strtol(node->extra->token.start, NULL, 10);
+                if (array_size <= 0) {
+                    error(node->token.line, "array size must be greater than zero");
+                }
+                if(array_size > MAX_ARRAY_SIZE) {
+                    error(node->token.line, "array exceeded maximum size: %d", MAX_ARRAY_SIZE);
+                }
+            }
+
             //declare symbol (handles duplicates)
-            declare_symbol(sema, make_symbol(node->token.start, node->token.length, node->type, is_global));
+            declare_symbol(sema, make_symbol(node->token.start, node->token.length, node->type, is_global, array_size));
 
             //walk initialization if any, to annotate its type
             sema_node(sema, node->left);
 
-            //if were declaring an array with a size node in extra
-            if(node->extra != NULL) {
-                int size = (int)strtol(node->extra->token.start, NULL, 10);
-                if (size <= 0) {
-                    error(node->token.line, "array size must be greater than zero");
-                }
-                if(size > MAX_ARRAY_SIZE) {
-                    error(node->token.line, "array exceeded maximum size: %d", MAX_ARRAY_SIZE);
-                }
-            }
             //if theres an initialization (and no array), check type compatability between declaration and initialization
-            else if(node->left != NULL && !types_compatible(node->type, node->left->type)) {
+            if(node->extra == NULL && node->left != NULL && !types_compatible(node->type, node->left->type)) {
                 error(node->token.line, "incompatible types in assignment");
             }
 

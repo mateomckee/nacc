@@ -1,9 +1,6 @@
 #include "tac.h"
 #include <stdio.h>
 
-#define SP_OFFSET_MAX  504
-#define SP_OFFSET_MIN -512
-
 #define FUNC_MAX_VARS 256
 
 /*
@@ -16,7 +13,7 @@
 typedef struct {
     char name[TAC_NAME_MAX];
     int offset; //byte offset from stack pointer (sp)
-
+    int slots;  //1 for scalars/pointers, N for arrays
 } VarEntry;
 
 typedef struct {

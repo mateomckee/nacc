@@ -53,30 +53,19 @@ void tac_init(TACGen* tac) {
     tac->str_count = 0;
 }
 
+//lower a[i] / p[i] to an address: base + i * WORD_SIZE
+//base comes from tac_node(left): arrays decay to &arr via NODE_IDENT, pointers return their value
 char* tac_index_addr(TACGen* tac, ASTNode* node) {
-    //node is NODE_INDEX: left=array ident, right=index expr
-    char* array_name = nacc_malloc(TAC_NAME_MAX);
-    snprintf(array_name, TAC_NAME_MAX, "%.*s", node->left->token.length, node->left->token.start);
-
-    //evaluate index
+    char* base = tac_node(tac, node->left);
     char* index = tac_node(tac, node->right);
 
-    //offset = index * WORD_SIZE
-    char* size_str = nacc_malloc(TAC_NAME_MAX);
+    char size_str[TAC_NAME_MAX];
     snprintf(size_str, TAC_NAME_MAX, "%d", WORD_SIZE);
     char* t_offset = make_temp(tac);
     emit(tac, TAC_MUL, t_offset, index, size_str);
 
-    //base = &array
-    TACKind base_kind = TAC_ADDR;
-    if(node->left->type == TYPE_INT_PTR || node->left->type == TYPE_CHAR_PTR) base_kind = TAC_ASSIGN;
-    char* t_base = make_temp(tac);
-    emit(tac, base_kind, t_base, array_name, NULL);
-
-    //addr = base + offset
     char* t_addr = make_temp(tac);
-    emit(tac, TAC_ADD, t_addr, t_base, t_offset);
-
+    emit(tac, TAC_ADD, t_addr, base, t_offset);
     return t_addr;
 }
 
@@ -344,56 +333,47 @@ char* tac_node(TACGen* tac, ASTNode* node) {
             return old;
         }
         case NODE_ASSIGN : {
-            TACKind tac_kind = TAC_ASSIGN;
-            char* name = nacc_malloc(TAC_NAME_MAX);
+            //resolve the LHS: either an address operand (a[i] or *p) or a variable name
+            ASTNode* lhs = node->left;
+            char* target = nacc_malloc(TAC_NAME_MAX);
+            TACKind store_kind = TAC_ASSIGN;
 
-            //a[i] = x
-            if (node->left->kind == NODE_INDEX) {
-                tac_kind = TAC_ASSIGN_DEREF;
-                char* t_addr = tac_index_addr(tac, node->left);
-                //copy t_addr to name, gets emitted down the line
-                name = t_addr;
+            if (lhs->kind == NODE_INDEX) {
+                //a[i] = x: target holds the computed element address
+                target = tac_index_addr(tac, lhs);
+                store_kind = TAC_ASSIGN_DEREF;
+            } else if (lhs->kind == NODE_UNOP && lhs->token.kind == TOK_STAR) {
+                //*p = x: target is the pointer variable (its value is the address)
+                snprintf(target, TAC_NAME_MAX, "%.*s", lhs->left->token.length, lhs->left->token.start);
+                store_kind = TAC_ASSIGN_DEREF;
+            } else {
+                //var = x
+                snprintf(target, TAC_NAME_MAX, "%.*s", lhs->token.length, lhs->token.start);
             }
-            //*ptr = x
-            else if(node->left->kind == NODE_UNOP && node->left->token.kind == TOK_STAR) {
-                tac_kind = TAC_ASSIGN_DEREF;
-                //name should be the pointer variable, not the * token
-                snprintf(name, TAC_NAME_MAX, "%.*s", node->left->left->token.length, node->left->left->token.start);
-            }
-            //var = x
-            else { snprintf(name, TAC_NAME_MAX, "%.*s", node->left->token.length, node->left->token.start); }
 
-            //assign from: right
             char* right = tac_node(tac, node->right);
 
-            //handle possible compound assignment operators +=, -=, *=, /=
-            TACKind kind = TAC_NONE;
+            //handle compound assignment operators +=, -=, *=, /=
+            TACKind compound = TAC_NONE;
             switch(node->token.kind) {
-                case TOK_PLUSEQ: kind = TAC_ADD; break;
-                case TOK_MINUSEQ: kind = TAC_SUB; break;
-                case TOK_MULTEQ: kind = TAC_MUL; break;
-                case TOK_DIVEQ: kind = TAC_DIV; break;
+                case TOK_PLUSEQ: compound = TAC_ADD; break;
+                case TOK_MINUSEQ: compound = TAC_SUB; break;
+                case TOK_MULTEQ: compound = TAC_MUL; break;
+                case TOK_DIVEQ: compound = TAC_DIV; break;
                 default: break;
             }
-            //if we have a compound assignment operator, first do the arithmetic
-            if(kind != TAC_NONE) {
+            if (compound != TAC_NONE) {
+                //load current value: deref through address for *p/a[i], copy for var
                 char* t_cur = make_temp(tac);
-                //if left side (assign to) is a *ptr or a[i], dereference it first to get its value before doing compound operation
-                if(tac_kind == TAC_ASSIGN_DEREF) {
-                    emit(tac, TAC_DEREF, t_cur, name, NULL); 
-                }
-                else {
-                    emit(tac, TAC_ASSIGN, t_cur, name, NULL);
-                }
+                emit(tac, store_kind == TAC_ASSIGN_DEREF ? TAC_DEREF : TAC_ASSIGN, t_cur, target, NULL);
 
                 char* t_new = make_temp(tac);
-                emit(tac, kind, t_new, t_cur, right);
-                right = t_new; //set right to t_new to assign t_new to name
+                emit(tac, compound, t_new, t_cur, right);
+                right = t_new;
             }
-            
-            //emit final assignment instruction
-            emit(tac, tac_kind, name, right, NULL);
-            return name;
+
+            emit(tac, store_kind, target, right, NULL);
+            return target;
         }
         case NODE_CALL : {
             char* func_name = nacc_malloc(TAC_NAME_MAX);

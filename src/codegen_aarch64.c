@@ -10,6 +10,42 @@ int align16(int size) {
     return (size + 15) & ~15;
 }
 
+//SP-relative addressing helpers
+//if the offset doesn't fit, materialize it in x9 and use register addressing
+static int fits_ldst_imm(int offset) {
+    return offset >= 0 && offset <= 32760 && (offset % 8) == 0;
+}
+static int fits_add_imm(int offset) {
+    return offset >= 0 && offset <= 4095;
+}
+
+static void emit_ldr_sp(CodeGen* cg, int reg, int offset) {
+    if (fits_ldst_imm(offset)) {
+        fprintf(cg->out, "\tldr x%d, [sp, #%d]\n", reg, offset);
+    } else {
+        fprintf(cg->out, "\tmov x9, #%d\n", offset);
+        fprintf(cg->out, "\tldr x%d, [sp, x9]\n", reg);
+    }
+}
+
+static void emit_str_sp(CodeGen* cg, int reg, int offset) {
+    if (fits_ldst_imm(offset)) {
+        fprintf(cg->out, "\tstr x%d, [sp, #%d]\n", reg, offset);
+    } else {
+        fprintf(cg->out, "\tmov x9, #%d\n", offset);
+        fprintf(cg->out, "\tstr x%d, [sp, x9]\n", reg);
+    }
+}
+
+static void emit_add_sp(CodeGen* cg, int reg, int offset) {
+    if (fits_add_imm(offset)) {
+        fprintf(cg->out, "\tadd x%d, sp, #%d\n", reg, offset);
+    } else {
+        fprintf(cg->out, "\tmov x9, #%d\n", offset);
+        fprintf(cg->out, "\tadd x%d, sp, x9\n", reg);
+    }
+}
+
 //load an operand into a register
 //handles both immediate values and variables
 void load_operand(CodeGen* cg, char* operand, int reg) {
@@ -31,28 +67,14 @@ void load_operand(CodeGen* cg, char* operand, int reg) {
         fprintf(cg->out, "\tmov x%d, #%s\n", reg, operand);
     } else {
         //variable, load from stack
-        int offset = find_var(cg, operand);
-        if (offset > SP_OFFSET_MAX || offset < SP_OFFSET_MIN) {
-            fprintf(cg->out, "\tmov x9, #%d\n", offset);
-            fprintf(cg->out, "\tadd x9, sp, x9\n");
-            fprintf(cg->out, "\tldr x%d, [x9]\n", reg);
-        } else {
-            fprintf(cg->out, "\tldr x%d, [sp, #%d]\n", reg, offset);
-        }
+        emit_ldr_sp(cg, reg, find_var(cg, operand));
     }
 }
 
 //store a register to a variables stack slot
 void store_result(CodeGen* cg, char* result, int reg) {
     if (result == NULL || *result == '\0') return;
-    int offset = find_var(cg, result);
-    if (offset > SP_OFFSET_MAX || offset < SP_OFFSET_MIN) {
-        fprintf(cg->out, "\tmov x9, #%d\n", offset);
-        fprintf(cg->out, "\tadd x9, sp, x9\n");
-        fprintf(cg->out, "\tstr x%d, [x9]\n", reg);
-    } else {
-        fprintf(cg->out, "\tstr x%d, [sp, #%d]\n", reg, offset);
-    }
+    emit_str_sp(cg, reg, find_var(cg, result));
 }
 
 //
@@ -106,39 +128,22 @@ int find_var(CodeGen* cg, char* name) {
 }
 
 //adds new var to var table, returns offset
-int add_var(CodeGen* cg, char* name) {
+//slots = 1 for scalars/pointers, N for arrays
+int add_var(CodeGen* cg, char* name, int slots) {
     int existing_offset = lookup_var(cg, name);
     if(existing_offset != -1) return existing_offset;
 
-    if(cg->var_count >= FUNC_MAX_VARS) {
+    if(cg->var_count + slots > FUNC_MAX_VARS) {
         error(-1, "codegen: exceeded maximum variables in function '%s'\n", name);
-        return -1;
-    }
-
-    //new variable entry
-    VarEntry new_var;
-    strncpy(new_var.name, name, TAC_NAME_MAX); //set name
-    new_var.offset = cg->var_count * WORD_SIZE + 16; //plus 16 to not overwrite x29 and x30 (8 bytes each)
-    cg->vars[cg->var_count] = new_var; //assign
-    cg->var_count++;
-
-    return new_var.offset;
-}
-
-int add_array_var(CodeGen* cg, char* name, int size) {
-    int existing = lookup_var(cg, name);
-    if (existing != -1) return existing;
-
-    if(cg->var_count >= FUNC_MAX_VARS) {
-        error(-1, "codegen: exceeded maximum variables in function '%s\n'", name);
         return -1;
     }
 
     VarEntry new_var;
     strncpy(new_var.name, name, TAC_NAME_MAX);
-    new_var.offset = cg->var_count * WORD_SIZE + 16; //plus 16 to not overwrite
+    new_var.offset = cg->var_count * WORD_SIZE + 16; //+16 reserves x29/x30
+    new_var.slots = slots;
     cg->vars[cg->var_count] = new_var;
-    cg->var_count += size;  //reserve size # of slots instead of 1
+    cg->var_count += slots; //arrays reserve N slots
     return new_var.offset;
 }
 
@@ -160,33 +165,33 @@ void build_var_table(CodeGen* cg, int start) {
         //handle special cases, and use default to handle the rest
         switch(instr.kind) {
             case TAC_CALL :
-                if(is_var(instr.result)) add_var(cg, instr.result);
+                if(is_var(instr.result)) add_var(cg, instr.result, 1);
                 //op1 is a function name, skip it
-                if(is_var(instr.op2)) add_var(cg, instr.op2);
+                if(is_var(instr.op2)) add_var(cg, instr.op2, 1);
                 break;
             case TAC_JUMP : break; //only has result, which is a label, skip entirely
             case TAC_JUMP_FALSE :
-                if(is_var(instr.op1)) add_var(cg, instr.op1);
+                if(is_var(instr.op1)) add_var(cg, instr.op1, 1);
                 break;
             case TAC_PARAM_DECL :
-                if(is_var(instr.result)) add_var(cg, instr.result);
+                if(is_var(instr.result)) add_var(cg, instr.result, 1);
                 break;
             case TAC_ARG :
-                if(is_var(instr.result)) add_var(cg, instr.result);
+                if(is_var(instr.result)) add_var(cg, instr.result, 1);
                 break;
             case TAC_RETURN :
-                if(is_var(instr.op1)) add_var(cg, instr.op1);
+                if(is_var(instr.op1)) add_var(cg, instr.op1, 1);
                 break;
             case TAC_ARRAY_DECL : {
                 int size = (int)strtol(instr.op1, NULL, 10);
-                add_array_var(cg, instr.result, size); //key to implementing arrays
+                add_var(cg, instr.result, size);
                 break;
             }
             case TAC_GLOBAL : break; //skip entirely
             default:
-                if(is_var(instr.result)) add_var(cg, instr.result);
-                if(is_var(instr.op1)) add_var(cg, instr.op1);
-                if(is_var(instr.op2)) add_var(cg, instr.op2);
+                if(is_var(instr.result)) add_var(cg, instr.result, 1);
+                if(is_var(instr.op1)) add_var(cg, instr.op1, 1);
+                if(is_var(instr.op2)) add_var(cg, instr.op2, 1);
                 break;
         }
 
@@ -207,17 +212,10 @@ void emit_assign(CodeGen* cg, TACInstr* instr) {
     store_result(cg, instr->result, 0);
 }
 
-//instr->result = pointer variable name
+//instr->result = pointer variable name (holds the address)
 //instr->op1 = value to store through pointer
 void emit_assign_deref(CodeGen* cg, TACInstr* instr) {
-    int ptr_offset = find_var(cg, instr->result);
-    if (ptr_offset > SP_OFFSET_MAX || ptr_offset < SP_OFFSET_MIN) {
-        fprintf(cg->out, "\tmov x9, #%d\n", ptr_offset);
-        fprintf(cg->out, "\tadd x9, sp, x9\n");
-        fprintf(cg->out, "\tldr x0, [x9]\n");
-    } else {
-        fprintf(cg->out, "\tldr x0, [sp, #%d]\n", ptr_offset);
-    }
+    emit_ldr_sp(cg, 0, find_var(cg, instr->result));
     load_operand(cg, instr->op1, 1);
     fprintf(cg->out, "\tstr x1, [x0]\n");
 }
@@ -249,7 +247,9 @@ void emit_func_begin(CodeGen* cg, TACInstr* instr, int start) {
     fprintf(cg->out, "%s:\n", instr->result);
 
     //emit prologue
-    if (cg->frame_size > 512) {
+    //stp/ldp pre/post-index uses imm7 scaled by 8: range [-512, 504] for x-pair
+    //if frame is bigger, adjust sp manually
+    if (cg->frame_size > 504) {
         fprintf(cg->out, "\tsub sp, sp, #%d\n", cg->frame_size);
         fprintf(cg->out, "\tstp x29, x30, [sp]\n");
     } else {
@@ -261,20 +261,18 @@ void emit_func_begin(CodeGen* cg, TACInstr* instr, int start) {
     //spill parameters
     int i = start + 1; //skip func begin
     int reg = 0; //register
-    TACInstr param_instr = cg->tac->instructions[i]; 
+    TACInstr param_instr = cg->tac->instructions[i];
     while(param_instr.kind == TAC_PARAM_DECL) {
-        int offset = find_var(cg, param_instr.result);
-        fprintf(cg->out, "\tstr x%d, [sp, #%d]\n", reg, offset);
-
+        emit_str_sp(cg, reg, find_var(cg, param_instr.result));
         reg++;
         param_instr = cg->tac->instructions[++i];
     }
 }
 void emit_func_end(CodeGen* cg, TACInstr* instr) {
     fprintf(cg->out, "%s_end:\n", instr->result);
-    if (cg->frame_size > SP_OFFSET_MAX) {
-        fprintf(cg->out, "\tldp x29, x30, [sp]\n");          // restore without post-increment
-        fprintf(cg->out, "\tadd sp, sp, #%d\n", cg->frame_size); // manually adjust sp
+    if (cg->frame_size > 504) {
+        fprintf(cg->out, "\tldp x29, x30, [sp]\n");
+        fprintf(cg->out, "\tadd sp, sp, #%d\n", cg->frame_size);
     } else {
         fprintf(cg->out, "\tldp x29, x30, [sp], #%d\n", cg->frame_size);
     }
@@ -365,43 +363,14 @@ void emit_not(CodeGen* cg, TACInstr* instr) {
 
 //pointers require 8 bytes to store, use x instead of w
 void emit_addr(CodeGen* cg, TACInstr* instr) {
-    int offset = find_var(cg, instr->op1);
-    if (offset > SP_OFFSET_MAX || offset < SP_OFFSET_MIN) {
-        fprintf(cg->out, "\tmov x9, #%d\n", offset);
-        fprintf(cg->out, "\tadd x9, sp, x9\n");
-        fprintf(cg->out, "\tmov x0, x9\n");
-    } else {
-        fprintf(cg->out, "\tadd x0, sp, #%d\n", offset);
-    }
-
-    int result_offset = find_var(cg, instr->result);
-    if (result_offset > SP_OFFSET_MAX || result_offset < SP_OFFSET_MIN) {
-        fprintf(cg->out, "\tmov x9, #%d\n", result_offset);
-        fprintf(cg->out, "\tadd x9, sp, x9\n");
-        fprintf(cg->out, "\tstr x0, [x9]\n");
-    } else {
-        fprintf(cg->out, "\tstr x0, [sp, #%d]\n", result_offset);
-    }
+    emit_add_sp(cg, 0, find_var(cg, instr->op1));
+    emit_str_sp(cg, 0, find_var(cg, instr->result));
 }
 
 void emit_deref(CodeGen* cg, TACInstr* instr) {
-    int offset = find_var(cg, instr->op1);
-    if (offset > SP_OFFSET_MAX || offset < SP_OFFSET_MIN) {
-        fprintf(cg->out, "\tmov x9, #%d\n", offset);
-        fprintf(cg->out, "\tadd x9, sp, x9\n");
-        fprintf(cg->out, "\tldr x0, [x9]\n");
-    } else {
-        fprintf(cg->out, "\tldr x0, [sp, #%d]\n", offset);
-    }
+    emit_ldr_sp(cg, 0, find_var(cg, instr->op1));
     fprintf(cg->out, "\tldr x0, [x0]\n");
-    int result_offset = find_var(cg, instr->result);
-    if (result_offset > SP_OFFSET_MAX || result_offset < SP_OFFSET_MIN) {
-        fprintf(cg->out, "\tmov x9, #%d\n", result_offset);
-        fprintf(cg->out, "\tadd x9, sp, x9\n");
-        fprintf(cg->out, "\tstr x0, [x9]\n");
-    } else {
-        fprintf(cg->out, "\tstr x0, [sp, #%d]\n", result_offset);
-    }
+    emit_str_sp(cg, 0, find_var(cg, instr->result));
 }
 
 //main codegen loop

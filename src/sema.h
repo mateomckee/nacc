@@ -27,6 +27,7 @@ typedef struct {
 
     TypeKind type;
     int is_global;
+    int array_size; //1 for scalars/pointers, N for arrays
 } Symbol;
 
 typedef struct Scope {
